@@ -1,0 +1,549 @@
+<title>Taco</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&display=swap">
+<style>
+:root{
+  --bg:#F2F4EE; --surface:#FFFFFF; --surface-2:#E6EBE2; --ink:#1B2620; --ink-2:#5A675F; --line:#D5DCD1;
+  --accent:#EBA21C; --accent-ink:#2B1D00; --pine:#2E5E47; --dustin:#17767D; --brea:#A8406F;
+  --danger:#B42A1F; --on-fill:#FFFFFF; --tomato:#D9482B; --scrim:rgba(20,28,23,.42);
+  --shadow:0 12px 36px rgba(27,38,32,.18);
+  --display:"Bricolage Grotesque",ui-rounded,system-ui,-apple-system,sans-serif;
+  --body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0F1411; --surface:#18201B; --surface-2:#222B25; --ink:#E6ECE5; --ink-2:#9AA89E; --line:#2D3731;
+    --accent:#F0B43A; --accent-ink:#241800; --pine:#72B592; --dustin:#52BAC1; --brea:#E284B1;
+    --danger:#F2877E; --on-fill:#0F1411; --tomato:#EE7658; --scrim:rgba(0,0,0,.6);
+    --shadow:0 12px 36px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0F1411; --surface:#18201B; --surface-2:#222B25; --ink:#E6ECE5; --ink-2:#9AA89E; --line:#2D3731;
+  --accent:#F0B43A; --accent-ink:#241800; --pine:#72B592; --dustin:#52BAC1; --brea:#E284B1;
+  --danger:#F2877E; --on-fill:#0F1411; --tomato:#EE7658; --scrim:rgba(0,0,0,.6);
+  --shadow:0 12px 36px rgba(0,0,0,.5);
+}
+[hidden]{display:none!important}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--body);font-size:16px;line-height:1.4;padding-inline:16px;-webkit-tap-highlight-color:transparent}
+button,input,select{font:inherit;color:inherit}
+button{background:none;border:0;padding:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.wrap{max-width:560px;margin:0 auto;padding-block:0 120px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0}
+.muted{color:var(--ink-2)}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* header */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);margin-inline:-16px;padding:12px 16px 10px;border-bottom:1px solid var(--line)}
+.top-in{max-width:560px;margin:0 auto;display:flex;align-items:center;gap:10px}
+.brand{display:flex;align-items:center;gap:8px;font-family:var(--display);font-weight:800;font-size:28px;letter-spacing:-.02em;flex:1}
+.brand svg{width:36px;height:36px}
+.ttl{flex:1;min-width:0}
+.ttl h1{font-size:21px;font-weight:800;letter-spacing:-.01em;overflow-wrap:anywhere}
+.ttl .eyebrow{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-2);font-weight:700}
+.icon-btn{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex:none}
+.icon-btn:hover{background:var(--surface-2)}
+.icon-btn svg{width:22px;height:22px}
+.me{display:flex;align-items:center;gap:8px;padding:4px 12px 4px 4px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-weight:700;font-size:14px}
+.me.solo{padding:4px}
+.av{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:var(--on-fill);font-weight:700;font-size:14px;flex:none}
+.bg-dustin{background:var(--dustin)} .bg-brea{background:var(--brea)}
+
+/* home */
+.label{font-family:var(--body);font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-2);font-weight:700;margin:26px 0 10px}
+.cards{display:grid;gap:10px}
+.card{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px}
+.card:hover{border-color:var(--ink-2)}
+.card h3{font-size:20px;font-weight:800}
+.card .sub{font-size:14px;color:var(--ink-2);margin-top:2px}
+.card .progs{margin-top:12px;display:grid;gap:8px}
+.trow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px}
+.trow + .trow{border-top:1px solid var(--line)}
+.tlist{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.trow h3{font-size:17px;font-weight:600}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.btn{height:46px;padding:0 18px;border-radius:14px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn-primary{background:var(--accent);color:var(--accent-ink)}
+.btn-ghost{background:var(--surface-2)}
+.btn-danger{color:var(--danger);background:transparent;border:1px solid var(--line)}
+.btn-danger.armed{background:var(--danger);color:var(--on-fill);border-color:var(--danger)}
+.btn-wide{flex:1}
+.note{font-size:14px;color:var(--ink-2);margin-top:20px;line-height:1.5}
+.banner{margin-top:14px;padding:10px 14px;border-radius:12px;background:var(--surface-2);font-size:14px}
+.empty{padding:18px 16px;border:1px dashed var(--line);border-radius:16px;color:var(--ink-2);font-size:15px}
+
+/* progress */
+.prog{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;font-size:14px}
+.prog .av{width:24px;height:24px;font-size:12px}
+.bar{height:8px;border-radius:99px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:99px;transition:width .3s ease}
+.num{font-variant-numeric:tabular-nums;color:var(--ink-2);min-width:4.2em;text-align:right}
+.summary{padding:14px 0 4px;display:grid;gap:8px}
+.summary .big{font-size:15px}
+.summary .big b{font-family:var(--display);font-size:20px;font-weight:800}
+
+/* filters + legend */
+.seg{display:flex;background:var(--surface-2);border-radius:12px;padding:3px;gap:2px;margin-top:12px}
+.seg button{flex:1;height:36px;border-radius:9px;font-size:14px;font-weight:700;color:var(--ink-2)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--ink-2);margin-top:10px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.lg-box{width:13px;height:13px;border:2px solid var(--pine);border-radius:4px}
+.lg-dot{width:13px;height:13px;border:2px solid var(--ink-2);border-radius:50%}
+
+/* sections + rows */
+.sec{margin-top:22px}
+.sec-h{display:flex;align-items:center;gap:6px;border-bottom:2px solid var(--ink);padding-bottom:6px}
+.sec-toggle{display:flex;align-items:center;gap:6px;flex:1;min-width:0;text-align:left}
+.sec-toggle h2{font-size:19px;font-weight:800;letter-spacing:-.01em}
+.sec-toggle svg{width:18px;height:18px;transition:transform .2s;flex:none}
+.sec.closed .sec-toggle svg{transform:rotate(-90deg)}
+.sec .count{font-size:14px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.sec .icon-btn{width:34px;height:34px}
+.sec .icon-btn svg{width:18px;height:18px}
+ul.items{list-style:none;margin:0;padding:0}
+.sec.closed ul.items,.sec.closed .add-row{display:none}
+.row{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);min-height:56px}
+.row-main{flex:1;min-width:0;text-align:left;padding:9px 0;display:grid;gap:2px}
+.txt{font-size:17px;overflow-wrap:anywhere}
+.meta{font-size:13px;color:var(--ink-2);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.tag{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:2px 6px;border-radius:6px;background:var(--accent);color:var(--accent-ink)}
+.row.done .txt{color:var(--ink-2);text-decoration:line-through;text-decoration-thickness:1.5px}
+.checks{display:flex;gap:6px;justify-content:flex-end;min-width:76px;flex:none}
+.box{width:40px;height:40px;display:grid;place-items:center}
+.box i{width:30px;height:30px;border:2px solid var(--pine);border-radius:9px;display:grid;place-items:center;transition:background .15s}
+.box svg{width:20px;height:20px;opacity:0}
+.box.on i{background:var(--pine)}
+.box.on svg{opacity:1;color:var(--on-fill)}
+.chip{width:36px;height:40px;display:grid;place-items:center}
+.chip i{width:32px;height:32px;border-radius:50%;border:2px solid var(--pc);color:var(--pc);display:grid;place-items:center;font-style:normal;font-weight:700;font-size:14px;transition:background .15s}
+.chip.theirs:not(.on) i{border-style:dashed}
+.chip.on i{background:var(--pc);color:var(--on-fill)}
+.p-dustin{--pc:var(--dustin)} .p-brea{--pc:var(--brea)}
+.chip.static,.box.static{cursor:default}
+.box.static i{border-style:solid}
+@media (prefers-reduced-motion:no-preference){ .pop i{animation:pop .22s ease} }
+@keyframes pop{50%{transform:scale(1.15)}}
+.add-row{display:flex;align-items:center;gap:8px;width:100%;padding:12px 0;color:var(--ink-2);font-weight:700;font-size:15px}
+.add-row svg{width:18px;height:18px}
+.add-sec{margin-top:26px}
+.allpacked{text-align:center;padding:40px 16px;color:var(--ink-2)}
+.allpacked h2{font-size:24px;color:var(--ink);margin-bottom:6px}
+
+/* chooser */
+.chooser{max-width:420px;margin:0 auto;padding-block:12vh 40px;text-align:center}
+.chooser svg{width:72px;height:72px}
+.chooser h1{font-size:40px;font-weight:800;letter-spacing:-.02em;margin-top:6px}
+.chooser p{color:var(--ink-2)}
+.who-pick{display:grid;gap:10px;margin-top:24px}
+.who-pick button{display:flex;align-items:center;gap:12px;padding:14px;border-radius:16px;background:var(--surface);border:1px solid var(--line);font-weight:700;font-size:18px}
+.who-pick .av{width:40px;height:40px;font-size:17px}
+
+/* sheet */
+#sheetWrap{position:fixed;inset:0;z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+.sheet{position:relative;width:100%;max-width:560px;max-height:88%;overflow:auto;background:var(--surface);border-radius:22px 22px 0 0;box-shadow:var(--shadow);padding:10px 16px calc(18px + env(safe-area-inset-bottom,0px))}
+@media (prefers-reduced-motion:no-preference){ .sheet{animation:up .22s ease} }
+@keyframes up{from{transform:translateY(24px);opacity:.4}}
+.grab{width:40px;height:5px;border-radius:9px;background:var(--line);margin:0 auto 10px}
+.sheet h3{font-size:22px;font-weight:800;margin-bottom:12px}
+.field{display:grid;gap:6px;margin-bottom:14px}
+.field > label,.field legend{font-size:13px;font-weight:700;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em;padding:0}
+fieldset.field{border:0;margin:0 0 14px;padding:0;min-width:0}
+.in{height:48px;border-radius:12px;border:1.5px solid var(--line);background:var(--bg);padding:0 12px;font-size:17px;width:100%;box-sizing:border-box}
+.in:focus{border-color:var(--accent);outline:none}
+.who-seg{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.who-seg label{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;border:1.5px solid var(--line);font-weight:700;font-size:15px;cursor:pointer}
+.who-seg input{position:absolute;opacity:0;pointer-events:none}
+.who-seg label:has(input:checked){border-color:var(--ink);background:var(--surface-2)}
+.who-seg label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.who-ico{display:flex;gap:3px;flex:none}
+.who-ico .lg-box,.who-ico .lg-dot{width:14px;height:14px}
+.hint{font-size:14px;color:var(--ink-2);margin:8px 0 0}
+.sheet-actions{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap}
+.minor{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.minor .btn{height:40px;font-size:14px;padding:0 14px}
+.menu-list{display:grid;gap:8px}
+.menu-list .btn{justify-content:flex-start;height:52px}
+
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:700;font-size:14px;max-width:calc(100% - 32px);box-shadow:var(--shadow)}
+</style>
+
+<div id="app"></div>
+<div id="sheetWrap" hidden><div class="scrim" data-close></div><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+<div id="toast" role="status" hidden></div>
+
+<script>
+const SEED = {"lists":{"hiking":{"name":"Hiking Packing List","kind":"template","created":1758000000000,"sections":{"clo":{"name":"Clothing","order":1000},"trail":{"name":"On the trail","order":2000},"camp":{"name":"Camp & kitchen","order":3000},"elec":{"name":"Electronics","order":4000},"pers":{"name":"Personal","order":5000}},"items":{"boots":{"text":"Hiking boots","who":"each","sec":"clo","order":1000},"socks":{"text":"Wool socks (4 pairs)","who":"each","sec":"clo","order":2000},"hoodie":{"text":"Sun hoodie","who":"each","sec":"clo","order":3000},"shell":{"text":"Rain shell","who":"each","sec":"clo","order":4000},"puffy":{"text":"Puffy jacket","who":"each","sec":"clo","order":5000},"hat":{"text":"Sun hat","who":"each","sec":"clo","order":6000},"sandals":{"text":"Camp sandals","who":"each","sec":"clo","order":7000},"daypack":{"text":"Daypack","who":"each","sec":"trail","order":1000},"bladder":{"text":"Water bladder (3 L)","who":"each","sec":"trail","order":2000},"headlamp":{"text":"Headlamp","who":"each","sec":"trail","order":3000},"poles":{"text":"Trekking poles","who":"brea","sec":"trail","order":4000},"sunnies":{"text":"Sunglasses","who":"each","sec":"trail","order":5000},"maps":{"text":"Offline maps downloaded","who":"shared","sec":"trail","order":6000},"firstaid":{"text":"First aid kit","who":"shared","sec":"trail","order":7000},"sunscreen":{"text":"Sunscreen","who":"shared","sec":"trail","order":8000},"lytes":{"text":"Electrolyte packets","who":"shared","sec":"trail","order":9000},"tent":{"text":"Tent","who":"shared","sec":"camp","order":1000},"bag":{"text":"Sleeping bag","who":"each","sec":"camp","order":2000},"pad":{"text":"Sleeping pad","who":"each","sec":"camp","order":3000},"stove":{"text":"Stove + fuel canister","who":"shared","sec":"camp","order":4000},"pot":{"text":"Cook pot & sporks","who":"shared","sec":"camp","order":5000},"cooler":{"text":"Cooler","who":"shared","sec":"camp","order":6000},"coffee":{"text":"Coffee setup","who":"shared","sec":"camp","order":7000},"charger":{"text":"Phone charger","who":"each","sec":"elec","order":1000},"bank":{"text":"Power bank","who":"shared","sec":"elec","order":2000},"camera":{"text":"Camera + spare batteries","who":"dustin","sec":"elec","order":3000},"kindle":{"text":"Kindle","who":"brea","sec":"elec","order":4000},"toiletries":{"text":"Toiletry kit","who":"each","sec":"pers","order":1000},"parkpass":{"text":"National parks pass","who":"shared","sec":"pers","order":2000}}},"utah26":{"name":"Utah · Sep 2026","kind":"trip","from":"hiking","created":1790000000000,"sections":{"clo":{"name":"Clothing","order":1000},"trail":{"name":"On the trail","order":2000},"camp":{"name":"Camp & kitchen","order":3000},"elec":{"name":"Electronics","order":4000},"pers":{"name":"Personal","order":5000}},"items":{"boots":{"text":"Hiking boots","who":"each","sec":"clo","order":1000},"socks":{"text":"Wool socks (4 pairs)","who":"each","sec":"clo","order":2000},"hoodie":{"text":"Sun hoodie","who":"each","sec":"clo","order":3000},"shell":{"text":"Rain shell","who":"each","sec":"clo","order":4000},"puffy":{"text":"Puffy jacket","who":"each","sec":"clo","order":5000},"hat":{"text":"Sun hat","who":"each","sec":"clo","order":6000},"sandals":{"text":"Camp sandals","who":"each","sec":"clo","order":7000},"daypack":{"text":"Daypack","who":"each","sec":"trail","order":1000},"bladder":{"text":"Water bladder (3 L)","who":"each","sec":"trail","order":2000},"headlamp":{"text":"Headlamp","who":"each","sec":"trail","order":3000},"poles":{"text":"Trekking poles","who":"brea","sec":"trail","order":4000},"sunnies":{"text":"Sunglasses","who":"each","sec":"trail","order":5000},"maps":{"text":"Offline maps downloaded","who":"shared","sec":"trail","order":6000},"firstaid":{"text":"First aid kit","who":"shared","sec":"trail","order":7000},"sunscreen":{"text":"Sunscreen","who":"shared","sec":"trail","order":8000},"lytes":{"text":"Electrolyte packets","who":"shared","sec":"trail","order":9000},"tent":{"text":"Tent","who":"shared","sec":"camp","order":1000},"bag":{"text":"Sleeping bag","who":"each","sec":"camp","order":2000},"pad":{"text":"Sleeping pad","who":"each","sec":"camp","order":3000},"stove":{"text":"Stove + fuel canister","who":"shared","sec":"camp","order":4000},"pot":{"text":"Cook pot & sporks","who":"shared","sec":"camp","order":5000},"cooler":{"text":"Cooler","who":"shared","sec":"camp","order":6000},"coffee":{"text":"Coffee setup","who":"shared","sec":"camp","order":7000},"charger":{"text":"Phone charger","who":"each","sec":"elec","order":1000},"bank":{"text":"Power bank","who":"shared","sec":"elec","order":2000},"camera":{"text":"Camera + spare batteries","who":"dustin","sec":"elec","order":3000},"kindle":{"text":"Kindle","who":"brea","sec":"elec","order":4000},"toiletries":{"text":"Toiletry kit","who":"each","sec":"pers","order":1000},"parkpass":{"text":"National parks pass","who":"shared","sec":"pers","order":2000},"resv":{"text":"Park entry reservations (screenshots)","who":"shared","sec":"trail","order":10000,"tripOnly":true}}}},"checks":{"utah26":{"boots":{"dustin":true},"socks":{"dustin":true,"brea":true},"hoodie":{"brea":true},"daypack":{"dustin":true,"brea":true},"tent":{"brea":true},"stove":{"dustin":true},"bag":{"dustin":true},"camera":{"dustin":true},"charger":{"brea":true},"firstaid":{"dustin":true}}}};
+const PEOPLE=[{id:'dustin',name:'Dustin',init:'D'},{id:'brea',name:'Brea',init:'B'}];
+const P=Object.fromEntries(PEOPLE.map(p=>[p.id,p]));
+const WHO=[
+  {id:'shared',label:'Shared',hint:'One check covers the household. Tent, stove, first aid.'},
+  {id:'each',label:'Each',hint:'Everyone packs their own. Done when both of you check it.'},
+  {id:'dustin',label:'Dustin only',hint:'Only Dustin packs this.'},
+  {id:'brea',label:'Brea only',hint:'Only Brea packs this.'}
+];
+const ICON={
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  dots:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
+  chev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  go:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>'
+};
+const LOGO='<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M4 17a16 16 0 0 0 32 0z" fill="var(--accent)"/><path d="M4 17c2-4 4-4 5.3 0s3.4 4 5.3 0 3.4-4 5.4 0 3.4 4 5.3 0 3.4-4 5.4 0 3.3 4 5.3 0" fill="none" stroke="var(--pine)" stroke-width="3" stroke-linecap="round"/><circle cx="13" cy="13.5" r="2.2" fill="var(--tomato)"/><circle cx="25" cy="13" r="2.2" fill="var(--tomato)"/><path d="M8 24a12 12 0 0 0 24 0" fill="none" stroke="var(--accent-ink)" stroke-opacity=".18" stroke-width="1.5"/></svg>';
+
+const ls={get(k,d){try{const v=localStorage.getItem('taco.'+k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('taco.'+k,JSON.stringify(v))}catch(e){}}};
+const S={lists:{},checks:{},mode:'loading',ready:false,me:ls.get('me',null),view:ls.get('view',{name:'home'}),filter:ls.get('filter','all'),collapsed:new Set(ls.get('collapsed',[]))};
+if(S.me && !P[S.me]) S.me=null;
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Math.random().toString(36).slice(2,9);
+const isObj=v=>v&&typeof v==='object'&&!Array.isArray(v);
+function merge(t,p){const o={...(isObj(t)?t:{})};for(const k in p){o[k]=isObj(p[k])&&isObj(o[k])?merge(o[k],p[k]):p[k]}return o}
+const clone=o=>JSON.parse(JSON.stringify(o));
+
+/* ---------- data helpers ---------- */
+const liveSecs=l=>Object.entries(l.sections||{}).filter(([,s])=>!s.deleted).sort((a,b)=>(a[1].order||0)-(b[1].order||0));
+const liveItems=(l,sid)=>Object.entries(l.items||{}).filter(([,i])=>!i.deleted&&(sid==null||i.sec===sid)&&l.sections?.[i.sec]&&!l.sections[i.sec].deleted).sort((a,b)=>(a[1].order||0)-(b[1].order||0));
+const owes=(it,pid)=>it.who==='shared'||it.who==='each'||it.who===pid;
+function isDone(it,ck){ck=ck||{};if(it.who==='shared')return PEOPLE.some(p=>ck[p.id]);if(it.who==='each')return PEOPLE.every(p=>ck[p.id]);return !!ck[it.who]}
+function doneFor(it,ck,pid){return it.who==='shared'?isDone(it,ck):!!(ck&&ck[pid])}
+function stats(id){
+  const l=S.lists[id],c=S.checks[id]||{};const items=liveItems(l);
+  const per={};PEOPLE.forEach(p=>{let o=0,d=0;items.forEach(([iid,it])=>{if(owes(it,p.id)){o++;if(doneFor(it,c[iid],p.id))d++}});per[p.id]={o,d}});
+  return {total:items.length,done:items.filter(([iid,it])=>isDone(it,c[iid])).length,per};
+}
+const maxOrder=(obj,f)=>Object.values(obj||{}).filter(f||(()=>true)).reduce((m,x)=>Math.max(m,x.order||0),0);
+const whoLabel=(it)=>it.who==='shared'?'Shared':it.who==='each'?'Each':(P[it.who]?.name||'?')+"'s";
+
+/* ---------- store: live (db) or local demo ---------- */
+let db=null;const queues={};
+function applyLocal(path,patch,full){
+  const [col,id]=path.split('/');
+  if(col==='lists') S.lists[id]=full?clone(patch):merge(S.lists[id],patch);
+  else S.checks[id]=full?clone(patch.c||{}):merge(S.checks[id],patch.c||{});
+}
+function localDoc(path){const [col,id]=path.split('/');return col==='lists'?S.lists[id]:{c:S.checks[id]||{}}}
+function write(path,patch,full){
+  applyLocal(path,patch,full);render();
+  if(!db) return Promise.resolve();
+  const ref=db.doc(path);
+  const run=()=>full?ref.set(patch):ref.update(patch).catch(e=>{if(e&&e.code==='invalid_argument'&&localDoc(path))return ref.set(clone(localDoc(path)));throw e});
+  const p=(queues[path]||Promise.resolve()).then(run)
+    .catch(e=>{if(e&&e.code==='unavailable')return new Promise(r=>setTimeout(r,300+Math.random()*700)).then(run);throw e})
+    .catch(e=>{console.warn(e);toast(errMsg(e))});
+  queues[path]=p;return p;
+}
+function removeDoc(path){
+  const [col,id]=path.split('/');
+  if(col==='lists')delete S.lists[id];else delete S.checks[id];
+  render();
+  if(!db)return;
+  queues[path]=(queues[path]||Promise.resolve()).then(()=>db.doc(path).delete()).catch(e=>{console.warn(e);toast(errMsg(e))});
+}
+function errMsg(e){
+  const c=e&&e.code;
+  if(c==='invalid_argument')return "Couldn't save. You may only have view access to this page.";
+  if(c==='quota_exceeded')return 'Taco is full. Delete an old trip to make room.';
+  if(c==='revoked')return 'Access to this page changed. Reload to continue.';
+  return "Couldn't save that change. Check your connection and try again.";
+}
+const updList=(id,patch)=>write('lists/'+id,patch);
+const updChecks=(id,c)=>write('checks/'+id,{c});
+
+async function init(){
+  render();
+  let d=null;
+  try{d=window.claude&&typeof window.claude.use==='function'?await window.claude.use('db'):null}catch(e){d=null}
+  if(!d){S.lists=clone(SEED.lists);S.checks=clone(SEED.checks);S.mode='local';S.ready=true;render();return}
+  db=d;S.mode='live';
+  db.collection('lists').onSnapshot(snap=>{const o={};snap.docs.forEach(x=>{o[x.id]=x.data()});S.lists=o;S.ready=true;render()},e=>{toast(errMsg(e))});
+  db.collection('checks').onSnapshot(snap=>{const o={};snap.docs.forEach(x=>{o[x.id]=(x.data()||{}).c||{}});S.checks=o;render()},e=>{toast(errMsg(e))});
+}
+
+/* ---------- views ---------- */
+function meBtn(solo){
+  const p=P[S.me];
+  return `<button class="me ${solo?'solo':''}" data-act="me" aria-label="Packing as ${p.name}. Switch person">
+    <span class="av bg-${p.id}">${p.init}</span>${solo?'':`<span>Packing as ${p.name}</span>`}</button>`;
+}
+function progRows(st){
+  return PEOPLE.map(p=>{const s=st.per[p.id];const pct=s.o?Math.round(s.d/s.o*100):0;
+    return `<div class="prog"><span class="av bg-${p.id}">${p.init}</span><div class="bar" role="img" aria-label="${p.name}: ${s.d} of ${s.o} packed"><i class="bg-${p.id}" style="width:${pct}%"></i></div><span class="num">${s.d}/${s.o}</span></div>`}).join('');
+}
+function chooserHTML(){
+  return `<div class="chooser">${LOGO}<h1>Taco</h1><p>Who's packing on this phone?</p>
+  <div class="who-pick">${PEOPLE.map(p=>`<button data-act="pick" data-p="${p.id}"><span class="av bg-${p.id}">${p.init}</span>${p.name}</button>`).join('')}</div>
+  <p class="note">You can switch anytime from the circle in the corner.</p></div>`;
+}
+function homeHTML(){
+  const all=Object.entries(S.lists);
+  const trips=all.filter(([,l])=>l.kind==='trip').sort((a,b)=>(b[1].created||0)-(a[1].created||0));
+  const tpls=all.filter(([,l])=>l.kind==='template').sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''));
+  const tripCards=trips.length?trips.map(([id,l])=>{const st=stats(id);const from=S.lists[l.from]?.name;
+    const packed=st.total&&st.done===st.total;
+    return `<button class="card" data-act="open" data-id="${id}"><h3>${esc(l.name)}</h3>
+      <div class="sub tnum">${packed?'All packed':`${st.done} of ${st.total} items packed`}${from?` · from ${esc(from)}`:''}</div>
+      <div class="progs">${progRows(st)}</div></button>`}).join('')
+    :`<div class="empty">No trips yet. Start a pack from a template and everything begins unchecked.</div>`;
+  const tplRows=tpls.length?`<div class="tlist">${tpls.map(([id,l])=>{const n=liveItems(l).length,sc=liveSecs(l).length;
+    return `<button class="trow card" style="border:0;border-radius:0" data-act="open" data-id="${id}"><div><h3>${esc(l.name)}</h3><div class="sub tnum">${n} items · ${sc} sections</div></div>${ICON.go}</button>`}).join('')}</div>`
+    :`<div class="empty">No templates yet. A template is your master list. Each trip starts as a fresh copy.</div>`;
+  return `<header class="top"><div class="top-in"><div class="brand">${LOGO}Taco</div>${meBtn(false)}</div></header>
+  <main class="wrap">
+    ${S.mode==='local'?`<div class="banner">Demo mode: changes stay on this device and reset when you reload.</div>`:''}
+    <h2 class="label">Packing now</h2><div class="cards">${tripCards}</div>
+    <h2 class="label">Templates</h2>${tplRows}
+    <div class="btns"><button class="btn btn-primary btn-wide" data-act="start">${ICON.plus.replace('<svg','<svg width="20" height="20"')}Start a pack</button><button class="btn btn-ghost" data-act="newtpl">New template</button></div>
+    <p class="note">${S.mode==='live'?'Checks sync live to anyone with this page open. ':''}Templates never get checked off. Each trip is a fresh copy, so there's nothing to uncheck before you pack.</p>
+  </main>`;
+}
+function checksHTML(iid,it,ck,trip){
+  ck=ck||{};
+  if(it.who==='shared'){
+    const on=trip&&PEOPLE.some(p=>ck[p.id]);
+    if(!trip)return `<span class="box static" aria-hidden="true"><i></i></span>`;
+    return `<button class="box ${on?'on':''}" data-act="chk-shared" data-id="${iid}" aria-pressed="${on}" aria-label="${esc(it.text)}, shared">${`<i>${ICON.check}</i>`}</button>`;
+  }
+  const ppl=it.who==='each'?PEOPLE:(P[it.who]?[P[it.who]]:[]);
+  return ppl.map(p=>{
+    const on=trip&&!!ck[p.id];
+    if(!trip)return `<span class="chip static p-${p.id}" aria-hidden="true"><i>${p.init}</i></span>`;
+    return `<button class="chip p-${p.id} ${on?'on':''} ${p.id!==S.me?'theirs':''}" data-act="chk" data-id="${iid}" data-p="${p.id}" aria-pressed="${on}" aria-label="${esc(it.text)}, ${p.name}"><i>${p.init}</i></button>`}).join('');
+}
+function listHTML(id){
+  const l=S.lists[id],trip=l.kind==='trip',c=S.checks[id]||{};
+  const f=trip?S.filter:'all';
+  const st=trip?stats(id):null;
+  const from=trip&&S.lists[l.from]?S.lists[l.from].name:null;
+  let shownTotal=0;
+  const secs=liveSecs(l).map(([sid,s])=>{
+    const all=liveItems(l,sid);
+    const items=all.filter(([iid,it])=>f==='all'||(f==='left'&&!isDone(it,c[iid]))||(f==='mine'&&owes(it,S.me)&&!doneFor(it,c[iid],S.me)));
+    shownTotal+=items.length;
+    if(f!=='all'&&!items.length)return '';
+    const doneN=all.filter(([iid,it])=>isDone(it,c[iid])).length;
+    const closed=S.collapsed.has(id+':'+sid);
+    const rows=items.map(([iid,it])=>{
+      const done=trip&&isDone(it,c[iid]);
+      const by=trip&&it.who==='shared'&&done?' · packed by '+PEOPLE.filter(p=>(c[iid]||{})[p.id]).map(p=>p.name).join(' & '):'';
+      return `<li class="row ${done?'done':''}" data-row="${iid}"><button class="row-main" data-act="edit" data-id="${iid}"><span class="txt">${esc(it.text)}</span><span class="meta">${whoLabel(it)}${by}${trip&&it.tripOnly?' <span class="tag">This trip</span>':''}</span></button><div class="checks">${checksHTML(iid,it,c[iid],trip)}</div></li>`}).join('');
+    return `<section class="sec ${closed?'closed':''}"><div class="sec-h">
+      <button class="sec-toggle" data-act="fold" data-id="${sid}" aria-expanded="${!closed}">${ICON.chev}<h2>${esc(s.name)}</h2></button>
+      <span class="count">${trip?`${doneN}/${all.length}`:all.length}</span>
+      <button class="icon-btn" data-act="secmenu" data-id="${sid}" aria-label="Edit section ${esc(s.name)}">${ICON.dots}</button></div>
+      <ul class="items">${rows}</ul>
+      ${f==='all'?`<button class="add-row" data-act="add" data-id="${sid}">${ICON.plus}Add to ${esc(s.name)}</button>`:''}</section>`;
+  }).join('');
+  const emptyMsg=f==='mine'?`<h2>You're packed</h2><p>Everything you need to bring is checked off.</p>`:`<h2>All packed</h2><p>Every item on this trip is checked off.</p>`;
+  return `<header class="top"><div class="top-in">
+    <button class="icon-btn" data-act="home" aria-label="Back to all lists">${ICON.back}</button>
+    <div class="ttl"><div class="eyebrow">${trip?'Trip':'Template'}${from?' · from '+esc(from):''}</div><h1>${esc(l.name)}</h1></div>
+    ${meBtn(true)}<button class="icon-btn" data-act="listmenu" aria-label="List options">${ICON.dots}</button></div></header>
+  <main class="wrap">
+    ${trip?`<div class="summary"><div class="big tnum"><b>${st.done}</b> of ${st.total} items fully packed</div>${progRows(st)}</div>
+    <div class="seg" role="group" aria-label="Show">${[['all','Everything'],['left','Still to pack'],['mine','Mine to pack']].map(([k,v])=>`<button data-act="filter" data-id="${k}" aria-pressed="${f===k}">${v}</button>`).join('')}</div>`
+    :`<p class="note" style="margin-top:12px">This is the master list. Edit it anytime; start a pack to get a fresh, unchecked copy.</p>`}
+    <div class="legend"><span><i class="lg-box"></i>Shared: one check</span><span><i class="lg-dot"></i><i class="lg-dot" style="margin-left:-4px"></i>Each: both check</span><span><i class="lg-dot"></i>One person</span></div>
+    ${secs}
+    ${f!=='all'&&!shownTotal?`<div class="allpacked">${emptyMsg}</div>`:''}
+    ${f==='all'?`<div class="add-sec"><button class="btn btn-ghost" data-act="addsec">${ICON.plus.replace('<svg','<svg width="18" height="18"')}New section</button></div>`:''}
+  </main>`;
+}
+function loadingHTML(){return `<header class="top"><div class="top-in"><div class="brand">${LOGO}Taco</div></div></header><main class="wrap"><p class="note">Loading your lists…</p></main>`}
+
+function render(){
+  const app=$('#app');
+  if(!S.me){app.innerHTML=chooserHTML();return}
+  if(!S.ready){app.innerHTML=loadingHTML();return}
+  if(S.view.name==='list'&&S.lists[S.view.id])app.innerHTML=listHTML(S.view.id);
+  else{if(S.view.name==='list')S.view={name:'home'};app.innerHTML=homeHTML()}
+}
+function go(view){S.view=view;ls.set('view',view);closeSheet();render();window.scrollTo(0,0)}
+
+/* ---------- sheet ---------- */
+function openSheet(html,bind){
+  const sh=$('#sheet');sh.innerHTML='<div class="grab"></div>'+html;$('#sheetWrap').hidden=false;
+  bind&&bind(sh);
+  sh.querySelectorAll('[data-confirm]').forEach(b=>{const label=b.textContent;b.addEventListener('click',ev=>{if(!b.classList.contains('armed')){ev.stopImmediatePropagation();b.classList.add('armed');b.textContent=b.dataset.confirm;setTimeout(()=>{b.classList.remove('armed');b.textContent=label},3500)}},true)});
+  const first=sh.querySelector('input.in');if(first&&!first.dataset.nofocus)setTimeout(()=>first.focus(),60);
+}
+function closeSheet(){$('#sheetWrap').hidden=true;$('#sheet').innerHTML=''}
+$('#sheetWrap').addEventListener('click',e=>{if(e.target.hasAttribute('data-close'))closeSheet()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#sheetWrap').hidden)closeSheet()});
+let toastT;function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>{t.hidden=true},2600)}
+
+function whoFieldset(cur){
+  return `<fieldset class="field"><legend>Who packs it?</legend><div class="who-seg">${WHO.map(w=>{
+    const ico=w.id==='shared'?'<i class="lg-box"></i>':w.id==='each'?'<i class="lg-dot" style="border-color:var(--dustin)"></i><i class="lg-dot" style="border-color:var(--brea)"></i>':`<i class="lg-dot" style="border-color:var(--${w.id})"></i>`;
+    return `<label><input type="radio" name="who" id="who-${w.id}" value="${w.id}" ${cur===w.id?'checked':''}><span class="who-ico">${ico}</span>${w.label}</label>`}).join('')}</div>
+    <p class="hint" id="whoHint">${WHO.find(w=>w.id===cur)?.hint||''}</p></fieldset>`;
+}
+function bindWho(sh){sh.querySelectorAll('input[name=who]').forEach(r=>r.addEventListener('change',()=>{sh.querySelector('#whoHint').textContent=WHO.find(w=>w.id===r.value).hint}))}
+function secOptions(l,cur){return liveSecs(l).map(([sid,s])=>`<option value="${sid}" ${sid===cur?'selected':''}>${esc(s.name)}</option>`).join('')}
+
+function itemSheet(listId,iid,sid){
+  const l=S.lists[listId],trip=l.kind==='trip',it=iid?l.items[iid]:null;
+  const who=it?it.who:ls.get('lastWho','shared');
+  const tpl=trip&&S.lists[l.from];
+  openSheet(`<h3>${it?'Edit item':'Add to '+esc(l.sections[sid].name)}</h3>
+    <form id="itemForm" autocomplete="off">
+    <div class="field"><label for="f-text">Item</label><input class="in" id="f-text" value="${esc(it?.text||'')}" placeholder="e.g. Headlamp" enterkeyhint="${it?'done':'enter'}" ${it?'data-nofocus="1"':''}></div>
+    ${whoFieldset(who)}
+    ${it?`<div class="field"><label for="f-sec">Section</label><select class="in" id="f-sec">${secOptions(l,it.sec)}</select></div>
+      <div class="minor"><button type="button" class="btn btn-ghost" id="mvUp">Move up</button><button type="button" class="btn btn-ghost" id="mvDn">Move down</button>
+      ${trip&&it.tripOnly&&tpl?`<button type="button" class="btn btn-ghost" id="promote">Add to ${esc(tpl.name)}</button>`:''}</div>
+      ${trip?`<p class="hint" style="margin:-4px 0 14px">Edits here change this trip only${tpl?', not the template':''}.</p>`:''}`:''}
+    <div class="sheet-actions">
+      ${it?`<button type="button" class="btn btn-danger" id="del" data-confirm="Tap again to delete">Delete</button>`:`<button type="button" class="btn btn-ghost" id="done">Done</button>`}
+      <button type="submit" class="btn btn-primary btn-wide">${it?'Save':'Add item'}</button></div></form>`,sh=>{
+    bindWho(sh);
+    const getWho=()=>sh.querySelector('input[name=who]:checked')?.value||'shared';
+    sh.querySelector('#itemForm').addEventListener('submit',e=>{
+      e.preventDefault();
+      const text=sh.querySelector('#f-text').value.trim();
+      if(!text){sh.querySelector('#f-text').focus();return}
+      const w=getWho();ls.set('lastWho',w);
+      if(it){
+        const ns=sh.querySelector('#f-sec').value;const patch={text,who:w,sec:ns};
+        if(ns!==it.sec)patch.order=maxOrder(l.items,x=>x.sec===ns&&!x.deleted)+1000;
+        updList(listId,{items:{[iid]:patch}});closeSheet();
+      }else{
+        const nid=uid();const cur=S.lists[listId];
+        updList(listId,{items:{[nid]:{text,who:w,sec:sid,order:maxOrder(cur.items,x=>x.sec===sid&&!x.deleted)+1000,...(trip?{tripOnly:true}:{})}}});
+        const inp=sh.querySelector('#f-text');inp.value='';inp.focus();toast('Added '+text);
+      }
+    });
+    sh.querySelector('#done')?.addEventListener('click',closeSheet);
+    sh.querySelector('#del')?.addEventListener('click',()=>{updList(listId,{items:{[iid]:{deleted:true}}});closeSheet();toast('Deleted '+it.text)});
+    const mv=dir=>{
+      const cur=S.lists[listId];const sibs=liveItems(cur,cur.items[iid].sec);const i=sibs.findIndex(([k])=>k===iid);const j=i+dir;
+      if(j<0||j>=sibs.length)return toast(dir<0?'Already at the top':'Already at the bottom');
+      const patch={};sibs.forEach(([k],n)=>{patch[k]={order:(n+1)*1000}});
+      patch[iid]={order:(j+1)*1000};patch[sibs[j][0]]={order:(i+1)*1000};
+      updList(listId,{items:patch});
+    };
+    sh.querySelector('#mvUp')?.addEventListener('click',()=>mv(-1));
+    sh.querySelector('#mvDn')?.addEventListener('click',()=>mv(1));
+    sh.querySelector('#promote')?.addEventListener('click',()=>{promote(listId,[iid]);closeSheet()});
+  });
+}
+function promote(listId,ids){
+  const l=S.lists[listId],t=S.lists[l.from];
+  if(!t)return toast('The template for this trip was deleted');
+  const tp={items:{},sections:{}},lp={items:{}};
+  ids.forEach(iid=>{const it=l.items[iid];
+    if(!t.sections?.[it.sec]||t.sections[it.sec].deleted)tp.sections[it.sec]={name:l.sections[it.sec].name,order:l.sections[it.sec].order,deleted:false};
+    tp.items[iid]={text:it.text,who:it.who,sec:it.sec,order:maxOrder(t.items,x=>x.sec===it.sec&&!x.deleted)+1000,deleted:false};
+    lp.items[iid]={tripOnly:false}});
+  if(!Object.keys(tp.sections).length)delete tp.sections;
+  updList(l.from,tp);updList(listId,lp);
+  toast(`Added ${ids.length===1?'1 item':ids.length+' items'} to ${t.name}`);
+}
+function sectionSheet(listId,sid){
+  const l=S.lists[listId],s=sid?l.sections[sid]:null;const n=sid?liveItems(l,sid).length:0;
+  openSheet(`<h3>${s?'Edit section':'New section'}</h3><form id="secForm" autocomplete="off">
+    <div class="field"><label for="f-sname">Name</label><input class="in" id="f-sname" value="${esc(s?.name||'')}" placeholder="e.g. Kitchen" ${s?'data-nofocus="1"':''}></div>
+    ${s?`<div class="minor"><button type="button" class="btn btn-ghost" id="sUp">Move up</button><button type="button" class="btn btn-ghost" id="sDn">Move down</button></div>`:''}
+    <div class="sheet-actions">${s?`<button type="button" class="btn btn-danger" id="sDel" data-confirm="${n?`Delete it and ${n} item${n>1?'s':''}`:'Tap again to delete'}">Delete</button>`:''}
+    <button type="submit" class="btn btn-primary btn-wide">${s?'Save':'Add section'}</button></div></form>`,sh=>{
+    sh.querySelector('#secForm').addEventListener('submit',e=>{e.preventDefault();const name=sh.querySelector('#f-sname').value.trim();if(!name)return;
+      if(s)updList(listId,{sections:{[sid]:{name}}});else updList(listId,{sections:{[uid()]:{name,order:maxOrder(l.sections,x=>!x.deleted)+1000}}});closeSheet()});
+    const mv=dir=>{const cur=S.lists[listId];const ss=liveSecs(cur);const i=ss.findIndex(([k])=>k===sid),j=i+dir;if(j<0||j>=ss.length)return;
+      const patch={};ss.forEach(([k],n)=>{patch[k]={order:(n+1)*1000}});patch[sid]={order:(j+1)*1000};patch[ss[j][0]]={order:(i+1)*1000};updList(listId,{sections:patch})};
+    sh.querySelector('#sUp')?.addEventListener('click',()=>mv(-1));sh.querySelector('#sDn')?.addEventListener('click',()=>mv(1));
+    sh.querySelector('#sDel')?.addEventListener('click',()=>{const items={};liveItems(l,sid).forEach(([k])=>{items[k]={deleted:true}});updList(listId,{sections:{[sid]:{deleted:true}},items});closeSheet()});
+  });
+}
+function monthLabel(){const d=new Date();return d.toLocaleString('en-US',{month:'short'})+' '+d.getFullYear()}
+function startSheet(tplId){
+  const tpls=Object.entries(S.lists).filter(([,l])=>l.kind==='template');
+  if(!tpls.length)return toast('Make a template first');
+  const cur=tplId||tpls[0][0];
+  const defName=id=>{const n=(S.lists[id].name||'').replace(/\s*packing list\s*/i,'').trim()||S.lists[id].name;return n+' · '+monthLabel()};
+  openSheet(`<h3>Start a pack</h3><form id="startForm" autocomplete="off">
+    <div class="field"><label for="f-tpl">From template</label><select class="in" id="f-tpl">${tpls.map(([id,l])=>`<option value="${id}" ${id===cur?'selected':''}>${esc(l.name)}</option>`).join('')}</select></div>
+    <div class="field"><label for="f-tname">Trip name</label><input class="in" id="f-tname" value="${esc(defName(cur))}" data-nofocus="1"></div>
+    <p class="hint" style="margin:-4px 0 16px">Everything starts unchecked. Add one-off items to this trip without touching the template.</p>
+    <div class="sheet-actions"><button type="submit" class="btn btn-primary btn-wide">Start packing</button></div></form>`,sh=>{
+    const sel=sh.querySelector('#f-tpl'),nm=sh.querySelector('#f-tname');let touched=false;
+    nm.addEventListener('input',()=>{touched=true});sel.addEventListener('change',()=>{if(!touched)nm.value=defName(sel.value)});
+    sh.querySelector('#startForm').addEventListener('submit',e=>{e.preventDefault();
+      const t=S.lists[sel.value];const sections={},items={};
+      liveSecs(t).forEach(([k,s])=>{sections[k]={name:s.name,order:s.order}});
+      liveItems(t).forEach(([k,i])=>{items[k]={text:i.text,who:i.who,sec:i.sec,order:i.order}});
+      const id=uid();
+      write('lists/'+id,{name:nm.value.trim()||defName(sel.value),kind:'trip',from:sel.value,created:Date.now(),sections,items},true);
+      write('checks/'+id,{c:{}},true);
+      S.filter='all';ls.set('filter','all');go({name:'list',id});
+    });
+  });
+}
+function newTplSheet(){
+  openSheet(`<h3>New template</h3><form id="tplForm" autocomplete="off">
+    <div class="field"><label for="f-tpln">Name</label><input class="in" id="f-tpln" placeholder="e.g. Beach Weekend"></div>
+    <div class="sheet-actions"><button type="submit" class="btn btn-primary btn-wide">Create template</button></div></form>`,sh=>{
+    sh.querySelector('#tplForm').addEventListener('submit',e=>{e.preventDefault();const name=sh.querySelector('#f-tpln').value.trim();if(!name)return;
+      const id=uid();write('lists/'+id,{name,kind:'template',created:Date.now(),sections:{[uid()]:{name:'General',order:1000}},items:{}},true);go({name:'list',id})});
+  });
+}
+function listMenu(id){
+  const l=S.lists[id],trip=l.kind==='trip';
+  const tripOnly=trip?liveItems(l).filter(([,i])=>i.tripOnly).map(([k])=>k):[];
+  const tpl=trip&&S.lists[l.from];
+  openSheet(`<h3>${esc(l.name)}</h3>
+    <form id="renForm" autocomplete="off"><div class="field"><label for="f-ren">Rename</label><input class="in" id="f-ren" value="${esc(l.name)}" data-nofocus="1"></div></form>
+    <div class="menu-list">
+      <button class="btn btn-primary" id="mRen">Save name</button>
+      ${!trip?`<button class="btn btn-ghost" id="mStart">Start a pack from this template</button>`:''}
+      ${trip&&tpl&&tripOnly.length?`<button class="btn btn-ghost" id="mProm">Add ${tripOnly.length} trip-only item${tripOnly.length>1?'s':''} to ${esc(tpl.name)}</button>`:''}
+      ${trip?`<button class="btn btn-ghost" id="mClear">Uncheck everything on this trip</button>`:''}
+      <button class="btn btn-danger" id="mDel" data-confirm="Tap again to delete ${trip?'this trip':'this template'}">Delete ${trip?'trip':'template'}</button>
+    </div>`,sh=>{
+    const ren=()=>{const n=sh.querySelector('#f-ren').value.trim();if(n)updList(id,{name:n});closeSheet()};
+    sh.querySelector('#renForm').addEventListener('submit',e=>{e.preventDefault();ren()});
+    sh.querySelector('#mRen').addEventListener('click',ren);
+    sh.querySelector('#mStart')?.addEventListener('click',()=>startSheet(id));
+    sh.querySelector('#mProm')?.addEventListener('click',()=>{promote(id,tripOnly);closeSheet()});
+    const clr=sh.querySelector('#mClear');
+    if(clr){clr.dataset.confirm='Tap again to uncheck all';clr.addEventListener('click',()=>{if(!clr.classList.contains('armed'))return;write('checks/'+id,{c:{}},true);closeSheet();toast('Unchecked everything')})}
+    sh.querySelector('#mDel').addEventListener('click',()=>{removeDoc('lists/'+id);if(trip)removeDoc('checks/'+id);go({name:'home'});toast('Deleted '+l.name)});
+  });
+}
+
+/* ---------- actions ---------- */
+document.getElementById('app').addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]');if(!b)return;
+  const a=b.dataset.act,id=b.dataset.id,lid=S.view.id;
+  switch(a){
+    case 'pick':S.me=b.dataset.p;ls.set('me',S.me);render();break;
+    case 'me':{const i=PEOPLE.findIndex(p=>p.id===S.me);S.me=PEOPLE[(i+1)%PEOPLE.length].id;ls.set('me',S.me);render();toast('Now packing as '+P[S.me].name);break}
+    case 'open':go({name:'list',id});break;
+    case 'home':go({name:'home'});break;
+    case 'start':startSheet();break;
+    case 'newtpl':newTplSheet();break;
+    case 'filter':S.filter=id;ls.set('filter',id);render();break;
+    case 'fold':{const k=lid+':'+id;S.collapsed.has(k)?S.collapsed.delete(k):S.collapsed.add(k);ls.set('collapsed',[...S.collapsed]);render();break}
+    case 'add':itemSheet(lid,null,id);break;
+    case 'edit':itemSheet(lid,id);break;
+    case 'secmenu':sectionSheet(lid,id);break;
+    case 'addsec':sectionSheet(lid,null);break;
+    case 'listmenu':listMenu(lid);break;
+    case 'chk':{const p=b.dataset.p;const cur=!!(S.checks[lid]?.[id]?.[p]);updChecks(lid,{[id]:{[p]:!cur}});popRow(id);break}
+    case 'chk-shared':{const ck=S.checks[lid]?.[id]||{};const on=PEOPLE.some(p=>ck[p.id]);
+      const patch={};if(on)PEOPLE.forEach(p=>{patch[p.id]=false});else patch[S.me]=true;
+      updChecks(lid,{[id]:patch});popRow(id);break}
+  }
+});
+function popRow(iid){const r=document.querySelector(`[data-row="${iid}"] .checks`);if(r)r.querySelectorAll('.box,.chip').forEach(x=>x.classList.add('pop'))}
+
+init();
+</script>
