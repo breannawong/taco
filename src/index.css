@@ -169,3 +169,18 @@ h3 {
   width: 36px;
   height: 36px;
 }
+
+.dev-reset {
+  margin-top: 40px;
+}
+
+.linkish {
+  font-size: 13px;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.linkish:hover {
+  color: var(--ink);
+}
