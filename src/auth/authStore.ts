@@ -1,5 +1,6 @@
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase, supabaseConfigured } from '../lib/supabase'
+import { connectHousehold, disconnectHousehold } from '../store'
 import { clearMe, setMe } from '../store/session'
 import type { PersonId } from '../store/types'
 
@@ -64,11 +65,13 @@ async function loadProfile(user: User): Promise<void> {
     .maybeSingle()
 
   if (error) {
+    disconnectHousehold()
     applyProfile(null, error.message)
     return
   }
 
   if (!data) {
+    disconnectHousehold()
     applyProfile(
       null,
       'This account is not linked to the household yet. Ask Breanna to add your profile in Supabase.',
@@ -76,22 +79,22 @@ async function loadProfile(user: User): Promise<void> {
     return
   }
 
-  applyProfile(
-    {
-      id: data.id,
-      householdId: data.household_id,
-      personKey: data.person_key,
-      displayName: data.display_name,
-      initial: data.initial,
-      color: data.color,
-    },
-    null,
-  )
+  const profile: Profile = {
+    id: data.id,
+    householdId: data.household_id,
+    personKey: data.person_key,
+    displayName: data.display_name,
+    initial: data.initial,
+    color: data.color,
+  }
+  applyProfile(profile, null)
+  await connectHousehold(profile.householdId)
 }
 
 /** Apply session from Supabase; load profile when signed in. */
 export async function applySession(session: Session | null): Promise<void> {
   if (!session?.user) {
+    disconnectHousehold()
     applyProfile(null, null)
     setState({
       ready: true,

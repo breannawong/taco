@@ -137,7 +137,7 @@ export function Home({ me }: Props) {
 
         <p className="dev-reset">
           <button type="button" className="linkish" onClick={() => resetSampleData()}>
-            Reset sample data
+            Reset sample data (shared)
           </button>
         </p>
       </main>

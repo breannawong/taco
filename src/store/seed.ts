@@ -1,12 +1,10 @@
 import type { Check, Item, List, Person, Section, StoreData } from './types'
+import { newId } from './who'
 
 export const PEOPLE: Person[] = [
   { id: 'dustin', name: 'Dustin', initial: 'D', color: '#17767D' },
   { id: 'brea', name: 'Brea', initial: 'B', color: '#A8406F' },
 ]
-
-const HIKING_ID = 'hiking'
-const UTAH_ID = 'utah26'
 
 type SeedItem = {
   key: string
@@ -82,19 +80,23 @@ const UTAH_CHECKS: { itemKey: string; personId: string }[] = [
   { itemKey: 'firstaid', personId: 'dustin' },
 ]
 
+/** Fresh sample data with UUID ids (required by Supabase). */
 function buildSampleData(): StoreData {
+  const hikingId = newId()
+  const utahId = newId()
+
   const lists: List[] = [
     {
-      id: HIKING_ID,
+      id: hikingId,
       name: 'Hiking Packing List',
       kind: 'template',
       createdAt: 1758000000000,
     },
     {
-      id: UTAH_ID,
+      id: utahId,
       name: 'Utah · Sep 2026',
       kind: 'trip',
-      templateId: HIKING_ID,
+      templateId: hikingId,
       createdAt: 1790000000000,
     },
   ]
@@ -102,17 +104,17 @@ function buildSampleData(): StoreData {
   const sections: Section[] = []
   const sectionIdByListAndKey = new Map<string, string>()
 
-  for (const listId of [HIKING_ID, UTAH_ID]) {
+  for (const listId of [hikingId, utahId]) {
     for (const def of SECTION_DEFS) {
-      const id = `${listId}-${def.key}`
+      const id = newId()
       const section: Section = {
         id,
         listId,
         name: def.name,
         position: def.position,
       }
-      if (listId === UTAH_ID) {
-        section.sourceSectionId = `${HIKING_ID}-${def.key}`
+      if (listId === utahId) {
+        section.sourceSectionId = sectionIdByListAndKey.get(`${hikingId}:${def.key}`)
       }
       sections.push(section)
       sectionIdByListAndKey.set(`${listId}:${def.key}`, id)
@@ -120,12 +122,13 @@ function buildSampleData(): StoreData {
   }
 
   const items: Item[] = []
+  const utahItemIdByKey = new Map<string, string>()
 
   for (const def of TEMPLATE_ITEMS) {
     items.push({
-      id: `${HIKING_ID}-${def.key}`,
-      listId: HIKING_ID,
-      sectionId: sectionIdByListAndKey.get(`${HIKING_ID}:${def.sectionKey}`)!,
+      id: newId(),
+      listId: hikingId,
+      sectionId: sectionIdByListAndKey.get(`${hikingId}:${def.sectionKey}`)!,
       text: def.text,
       who: def.who,
       position: def.position,
@@ -133,10 +136,12 @@ function buildSampleData(): StoreData {
   }
 
   for (const def of [...TEMPLATE_ITEMS, TRIP_ONLY_ITEM]) {
+    const id = newId()
+    utahItemIdByKey.set(def.key, id)
     items.push({
-      id: `${UTAH_ID}-${def.key}`,
-      listId: UTAH_ID,
-      sectionId: sectionIdByListAndKey.get(`${UTAH_ID}:${def.sectionKey}`)!,
+      id,
+      listId: utahId,
+      sectionId: sectionIdByListAndKey.get(`${utahId}:${def.sectionKey}`)!,
       text: def.text,
       who: def.who,
       position: def.position,
@@ -146,8 +151,8 @@ function buildSampleData(): StoreData {
 
   const checkedAt = 1790000001000
   const checks: Check[] = UTAH_CHECKS.map(({ itemKey, personId }) => ({
-    listId: UTAH_ID,
-    itemId: `${UTAH_ID}-${itemKey}`,
+    listId: utahId,
+    itemId: utahItemIdByKey.get(itemKey)!,
     personId,
     checkedAt,
   }))

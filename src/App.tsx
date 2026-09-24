@@ -8,11 +8,14 @@ import { initAuth, signOut } from './auth/authStore'
 import { useAuth } from './auth/useAuth'
 import { useMe } from './store/useMe'
 import { useView } from './store/useNav'
+import { useStoreStatus } from './store/useStoreStatus'
+import { connectHousehold } from './store'
 
 export default function App() {
   const auth = useAuth()
   const me = useMe()
   const view = useView()
+  const storeStatus = useStoreStatus()
 
   useEffect(() => {
     initAuth()
@@ -40,6 +43,34 @@ export default function App() {
           each user’s Auth UUID.
         </p>
         <p className="dev-reset">
+          <button type="button" className="linkish" onClick={() => void signOut()}>
+            Sign out
+          </button>
+        </p>
+      </main>
+    )
+  } else if (!storeStatus.ready) {
+    screen = (
+      <main className="wrap">
+        <p className="note">Loading your lists…</p>
+      </main>
+    )
+  } else if (storeStatus.error) {
+    screen = (
+      <main className="wrap" style={{ paddingTop: 48 }}>
+        <h2 style={{ fontFamily: 'var(--display)', fontWeight: 800 }}>Couldn’t load lists</h2>
+        <p className="note">{storeStatus.error}</p>
+        <p className="dev-reset">
+          <button
+            type="button"
+            className="linkish"
+            onClick={() => {
+              if (auth.profile) void connectHousehold(auth.profile.householdId)
+            }}
+          >
+            Try again
+          </button>
+          {' · '}
           <button type="button" className="linkish" onClick={() => void signOut()}>
             Sign out
           </button>

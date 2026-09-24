@@ -1,4 +1,23 @@
-import { createSeedData } from './seed'
+import {
+  cloudClearChecksForList,
+  cloudDeleteCheck,
+  cloudDeleteChecksForItem,
+  cloudDeleteItem,
+  cloudDeleteList,
+  cloudDeleteSection,
+  cloudInsertItems,
+  cloudInsertList,
+  cloudInsertSections,
+  cloudUpdateItem,
+  cloudUpdateItemPositions,
+  cloudUpdateList,
+  cloudUpdateSection,
+  cloudUpdateSectionPositions,
+  cloudUpsertCheck,
+  fetchHouseholdStore,
+  replaceHouseholdStore,
+} from './cloud'
+import { createSeedData, PEOPLE } from './seed'
 import type { Item, Person, PersonId, StoreData, Who } from './types'
 import { newId, nextPosition, renumberPositions } from './who'
 
@@ -29,38 +48,30 @@ export function whoLabel(item: Item, people: Person[]): string {
 const STORAGE_KEY = 'taco.v1'
 
 type Listener = () => void
+type CloudWrite = (householdId: string) => Promise<void>
 
-let state: StoreData = loadInitial()
+type StoreStatus = {
+  /** False until connectHousehold finishes (or disconnect). */
+  ready: boolean
+  error: string | null
+  householdId: string | null
+}
+
+function emptyStore(people: Person[] = PEOPLE): StoreData {
+  return {
+    people: people.map((p) => ({ ...p })),
+    lists: [],
+    sections: [],
+    items: [],
+    checks: [],
+  }
+}
+
+let state: StoreData = emptyStore()
+let status: StoreStatus = { ready: false, error: null, householdId: null }
 const listeners = new Set<Listener>()
 
-function loadInitial(): StoreData {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as StoreData
-      if (isValidStore(parsed)) return parsed
-    }
-  } catch {
-    // Corrupt or unavailable — fall through to seed.
-  }
-  const seed = createSeedData()
-  persist(seed)
-  return seed
-}
-
-function isValidStore(data: unknown): data is StoreData {
-  if (!data || typeof data !== 'object') return false
-  const d = data as StoreData
-  return (
-    Array.isArray(d.people) &&
-    Array.isArray(d.lists) &&
-    Array.isArray(d.sections) &&
-    Array.isArray(d.items) &&
-    Array.isArray(d.checks)
-  )
-}
-
-function persist(data: StoreData) {
+function persistLocal(data: StoreData) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   } catch {
@@ -72,15 +83,31 @@ function emit() {
   for (const listener of listeners) listener()
 }
 
-function setState(next: StoreData) {
-  state = next
-  persist(state)
+function setStatus(patch: Partial<StoreStatus>) {
+  status = { ...status, ...patch }
   emit()
+}
+
+function setState(next: StoreData, cloud?: CloudWrite) {
+  state = next
+  persistLocal(state)
+  emit()
+  const hh = status.householdId
+  if (hh && cloud) {
+    void cloud(hh).catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : 'Sync failed'
+      console.error('Taco cloud sync failed:', message)
+    })
+  }
 }
 
 /** Current store snapshot. Prefer useStore() in React components. */
 export function getStore(): StoreData {
   return state
+}
+
+export function getStoreStatus(): StoreStatus {
+  return status
 }
 
 export function subscribe(listener: Listener): () => void {
@@ -90,9 +117,48 @@ export function subscribe(listener: Listener): () => void {
   }
 }
 
-/** Wipe local data and reload the Hiking + Utah sample. */
+/**
+ * Load this household from Supabase (source of truth).
+ * Empty household → upload Hiking + Utah sample once.
+ */
+export async function connectHousehold(householdId: string): Promise<void> {
+  if (status.householdId === householdId && status.ready && !status.error) {
+    return
+  }
+
+  setStatus({ ready: false, error: null, householdId })
+
+  try {
+    let data = await fetchHouseholdStore(householdId)
+    if (data.lists.length === 0) {
+      const seed = createSeedData()
+      seed.people = data.people.length > 0 ? data.people : seed.people
+      await replaceHouseholdStore(householdId, seed)
+      data = seed
+    }
+    state = data
+    persistLocal(state)
+    setStatus({ ready: true, error: null, householdId })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Could not load lists'
+    console.error(message)
+    setStatus({ ready: true, error: message, householdId })
+  }
+}
+
+/** Clear cloud binding on sign-out. */
+export function disconnectHousehold(): void {
+  status = { ready: false, error: null, householdId: null }
+  state = emptyStore()
+  emit()
+}
+
+/** Wipe household packing data and reload the Hiking + Utah sample. */
 export function resetSampleData(): void {
-  setState(createSeedData())
+  const seed = createSeedData()
+  seed.people =
+    state.people.length > 0 ? state.people.map((p) => ({ ...p })) : seed.people
+  setState(seed, (hh) => replaceHouseholdStore(hh, seed))
 }
 
 /** Toggle one person's check on an item (each / person who). */
@@ -105,21 +171,22 @@ export function togglePersonCheck(
     (c) => c.listId === listId && c.itemId === itemId && c.personId === personId,
   )
   if (existing) {
-    setState({
-      ...state,
-      checks: state.checks.filter(
-        (c) =>
-          !(c.listId === listId && c.itemId === itemId && c.personId === personId),
-      ),
-    })
+    setState(
+      {
+        ...state,
+        checks: state.checks.filter(
+          (c) =>
+            !(c.listId === listId && c.itemId === itemId && c.personId === personId),
+        ),
+      },
+      (hh) => cloudDeleteCheck(hh, itemId, personId),
+    )
   } else {
-    setState({
-      ...state,
-      checks: [
-        ...state.checks,
-        { listId, itemId, personId, checkedAt: Date.now() },
-      ],
-    })
+    const check = { listId, itemId, personId, checkedAt: Date.now() }
+    setState(
+      { ...state, checks: [...state.checks, check] },
+      (hh) => cloudUpsertCheck(hh, check),
+    )
   }
 }
 
@@ -136,20 +203,21 @@ export function toggleSharedCheck(
     (c) => c.listId === listId && c.itemId === itemId,
   )
   if (anyChecked) {
-    setState({
-      ...state,
-      checks: state.checks.filter(
-        (c) => !(c.listId === listId && c.itemId === itemId),
-      ),
-    })
+    setState(
+      {
+        ...state,
+        checks: state.checks.filter(
+          (c) => !(c.listId === listId && c.itemId === itemId),
+        ),
+      },
+      (hh) => cloudDeleteChecksForItem(hh, itemId),
+    )
   } else {
-    setState({
-      ...state,
-      checks: [
-        ...state.checks,
-        { listId, itemId, personId, checkedAt: Date.now() },
-      ],
-    })
+    const check = { listId, itemId, personId, checkedAt: Date.now() }
+    setState(
+      { ...state, checks: [...state.checks, check] },
+      (hh) => cloudUpsertCheck(hh, check),
+    )
   }
 }
 
@@ -172,7 +240,9 @@ export function addItem(
     position: nextPosition(siblings),
     ...(list?.kind === 'trip' ? { tripOnly: true } : {}),
   }
-  setState({ ...state, items: [...state.items, item] })
+  setState({ ...state, items: [...state.items, item] }, (hh) =>
+    cloudInsertItems(hh, [item]),
+  )
   return item
 }
 
@@ -194,20 +264,26 @@ export function updateItem(
     next = { ...next, position: nextPosition(siblings) }
   }
 
-  setState({
-    ...state,
-    items: state.items.map((i) => (i.id === itemId ? next : i)),
-  })
+  setState(
+    {
+      ...state,
+      items: state.items.map((i) => (i.id === itemId ? next : i)),
+    },
+    (hh) => cloudUpdateItem(hh, next),
+  )
 }
 
 export function deleteItem(itemId: string): void {
   const item = state.items.find((i) => i.id === itemId)
   if (!item) return
-  setState({
-    ...state,
-    items: state.items.filter((i) => i.id !== itemId),
-    checks: state.checks.filter((c) => c.itemId !== itemId),
-  })
+  setState(
+    {
+      ...state,
+      items: state.items.filter((i) => i.id !== itemId),
+      checks: state.checks.filter((c) => c.itemId !== itemId),
+    },
+    (hh) => cloudDeleteItem(hh, itemId),
+  )
 }
 
 /** Move item within its section. dir: -1 up, +1 down. Returns false if blocked. */
@@ -224,38 +300,42 @@ export function moveItem(itemId: string, dir: -1 | 1): boolean {
   ;[swapped[i], swapped[j]] = [swapped[j]!, swapped[i]!]
   const renumbered = renumberPositions(swapped)
   const byId = new Map(renumbered.map((r) => [r.id, r.position]))
-  setState({
-    ...state,
-    items: state.items.map((it) =>
-      byId.has(it.id) ? { ...it, position: byId.get(it.id)! } : it,
+  const nextItems = state.items.map((it) =>
+    byId.has(it.id) ? { ...it, position: byId.get(it.id)! } : it,
+  )
+  setState({ ...state, items: nextItems }, (hh) =>
+    cloudUpdateItemPositions(
+      hh,
+      nextItems.filter((it) => byId.has(it.id)),
     ),
-  })
+  )
   return true
 }
 
 export function addSection(listId: string, name: string): void {
   const siblings = state.sections.filter((s) => s.listId === listId)
-  setState({
-    ...state,
-    sections: [
-      ...state.sections,
-      {
-        id: newId(),
-        listId,
-        name,
-        position: nextPosition(siblings),
-      },
-    ],
-  })
+  const section = {
+    id: newId(),
+    listId,
+    name,
+    position: nextPosition(siblings),
+  }
+  setState({ ...state, sections: [...state.sections, section] }, (hh) =>
+    cloudInsertSections(hh, [section]),
+  )
 }
 
 export function updateSection(sectionId: string, name: string): void {
-  setState({
-    ...state,
-    sections: state.sections.map((s) =>
-      s.id === sectionId ? { ...s, name } : s,
-    ),
-  })
+  const section = state.sections.find((s) => s.id === sectionId)
+  if (!section) return
+  const next = { ...section, name }
+  setState(
+    {
+      ...state,
+      sections: state.sections.map((s) => (s.id === sectionId ? next : s)),
+    },
+    (hh) => cloudUpdateSection(hh, next),
+  )
 }
 
 export function deleteSection(sectionId: string): void {
@@ -264,12 +344,15 @@ export function deleteSection(sectionId: string): void {
   const itemIds = new Set(
     state.items.filter((i) => i.sectionId === sectionId).map((i) => i.id),
   )
-  setState({
-    ...state,
-    sections: state.sections.filter((s) => s.id !== sectionId),
-    items: state.items.filter((i) => i.sectionId !== sectionId),
-    checks: state.checks.filter((c) => !itemIds.has(c.itemId)),
-  })
+  setState(
+    {
+      ...state,
+      sections: state.sections.filter((s) => s.id !== sectionId),
+      items: state.items.filter((i) => i.sectionId !== sectionId),
+      checks: state.checks.filter((c) => !itemIds.has(c.itemId)),
+    },
+    (hh) => cloudDeleteSection(hh, sectionId),
+  )
 }
 
 export function moveSection(sectionId: string, dir: -1 | 1): boolean {
@@ -285,50 +368,65 @@ export function moveSection(sectionId: string, dir: -1 | 1): boolean {
   ;[swapped[i], swapped[j]] = [swapped[j]!, swapped[i]!]
   const renumbered = renumberPositions(swapped)
   const byId = new Map(renumbered.map((r) => [r.id, r.position]))
-  setState({
-    ...state,
-    sections: state.sections.map((s) =>
-      byId.has(s.id) ? { ...s, position: byId.get(s.id)! } : s,
+  const nextSections = state.sections.map((s) =>
+    byId.has(s.id) ? { ...s, position: byId.get(s.id)! } : s,
+  )
+  setState({ ...state, sections: nextSections }, (hh) =>
+    cloudUpdateSectionPositions(
+      hh,
+      nextSections.filter((s) => byId.has(s.id)),
     ),
-  })
+  )
   return true
 }
 
 export function renameList(listId: string, name: string): void {
-  setState({
-    ...state,
-    lists: state.lists.map((l) => (l.id === listId ? { ...l, name } : l)),
-  })
+  setState(
+    {
+      ...state,
+      lists: state.lists.map((l) => (l.id === listId ? { ...l, name } : l)),
+    },
+    (hh) => cloudUpdateList(hh, listId, { name }),
+  )
 }
 
 export function deleteList(listId: string): void {
-  setState({
-    ...state,
-    lists: state.lists.filter((l) => l.id !== listId),
-    sections: state.sections.filter((s) => s.listId !== listId),
-    items: state.items.filter((i) => i.listId !== listId),
-    checks: state.checks.filter((c) => c.listId !== listId),
-  })
+  setState(
+    {
+      ...state,
+      lists: state.lists.filter((l) => l.id !== listId),
+      sections: state.sections.filter((s) => s.listId !== listId),
+      items: state.items.filter((i) => i.listId !== listId),
+      checks: state.checks.filter((c) => c.listId !== listId),
+    },
+    (hh) => cloudDeleteList(hh, listId),
+  )
 }
 
 export function clearChecks(listId: string): void {
-  setState({
-    ...state,
-    checks: state.checks.filter((c) => c.listId !== listId),
-  })
+  setState(
+    {
+      ...state,
+      checks: state.checks.filter((c) => c.listId !== listId),
+    },
+    (hh) => cloudClearChecksForList(hh, listId),
+  )
 }
 
 /** Persist a new section order for a list (ids top → bottom). */
 export function setSectionOrder(listId: string, orderedIds: string[]): void {
   const byId = new Map(orderedIds.map((id, i) => [id, (i + 1) * 1000]))
-  setState({
-    ...state,
-    sections: state.sections.map((s) =>
-      s.listId === listId && byId.has(s.id)
-        ? { ...s, position: byId.get(s.id)! }
-        : s,
+  const nextSections = state.sections.map((s) =>
+    s.listId === listId && byId.has(s.id)
+      ? { ...s, position: byId.get(s.id)! }
+      : s,
+  )
+  setState({ ...state, sections: nextSections }, (hh) =>
+    cloudUpdateSectionPositions(
+      hh,
+      nextSections.filter((s) => s.listId === listId && byId.has(s.id)),
     ),
-  })
+  )
 }
 
 /**
@@ -341,17 +439,20 @@ export function setItemOrderInSection(
   orderedIds: string[],
 ): void {
   const byId = new Map(orderedIds.map((id, i) => [id, (i + 1) * 1000]))
-  setState({
-    ...state,
-    items: state.items.map((item) => {
-      if (!byId.has(item.id)) return item
-      return {
-        ...item,
-        sectionId,
-        position: byId.get(item.id)!,
-      }
-    }),
+  const nextItems = state.items.map((item) => {
+    if (!byId.has(item.id)) return item
+    return {
+      ...item,
+      sectionId,
+      position: byId.get(item.id)!,
+    }
   })
+  setState({ ...state, items: nextItems }, (hh) =>
+    cloudUpdateItemPositions(
+      hh,
+      nextItems.filter((item) => byId.has(item.id)),
+    ),
+  )
 }
 
 /**
@@ -362,15 +463,19 @@ export function setItemOrderOnly(
   orderedIds: string[],
 ): void {
   const byId = new Map(orderedIds.map((id, i) => [id, (i + 1) * 1000]))
-  setState({
-    ...state,
-    items: state.items.map((item) => {
-      if (item.sectionId !== sectionId || !byId.has(item.id)) return item
-      return { ...item, position: byId.get(item.id)! }
-    }),
+  const nextItems = state.items.map((item) => {
+    if (item.sectionId !== sectionId || !byId.has(item.id)) return item
+    return { ...item, position: byId.get(item.id)! }
   })
+  setState({ ...state, items: nextItems }, (hh) =>
+    cloudUpdateItemPositions(
+      hh,
+      nextItems.filter(
+        (item) => item.sectionId === sectionId && byId.has(item.id),
+      ),
+    ),
+  )
 }
-
 
 /**
  * Copy trip-only items onto the template (matching section via sourceSectionId),
@@ -385,6 +490,10 @@ export function promoteItems(listId: string, itemIds: string[]): string | null {
 
   let sections = [...state.sections]
   let items = [...state.items]
+  const newSections: typeof sections = []
+  const newItems: typeof items = []
+  const updatedTripItems: typeof items = []
+  const updatedTripSections: typeof sections = []
 
   for (const itemId of itemIds) {
     const tripItem = items.find((i) => i.id === itemId && i.listId === listId)
@@ -411,34 +520,43 @@ export function promoteItems(listId: string, itemIds: string[]): string | null {
         position: nextPosition(sections.filter((s) => s.listId === templateId)),
       }
       sections = [...sections, newSec]
+      newSections.push(newSec)
       templateSectionId = newSec.id
       if (tripSection) {
         sections = sections.map((s) =>
           s.id === tripSection.id ? { ...s, sourceSectionId: newSec.id } : s,
         )
+        const linked = sections.find((s) => s.id === tripSection.id)
+        if (linked) updatedTripSections.push(linked)
       }
     }
 
     const tplSiblings = items.filter(
       (i) => i.listId === templateId && i.sectionId === templateSectionId,
     )
-    items = [
-      ...items,
-      {
-        id: newId(),
-        listId: templateId,
-        sectionId: templateSectionId!,
-        text: tripItem.text,
-        who: tripItem.who,
-        position: nextPosition(tplSiblings),
-      },
-    ]
+    const added = {
+      id: newId(),
+      listId: templateId,
+      sectionId: templateSectionId!,
+      text: tripItem.text,
+      who: tripItem.who,
+      position: nextPosition(tplSiblings),
+    }
+    items = [...items, added]
+    newItems.push(added)
     items = items.map((i) =>
       i.id === itemId ? { ...i, tripOnly: false } : i,
     )
+    const cleared = items.find((i) => i.id === itemId)
+    if (cleared) updatedTripItems.push(cleared)
   }
 
-  setState({ ...state, sections, items })
+  setState({ ...state, sections, items }, async (hh) => {
+    await cloudInsertSections(hh, newSections)
+    await cloudInsertItems(hh, newItems)
+    for (const s of updatedTripSections) await cloudUpdateSection(hh, s)
+    for (const i of updatedTripItems) await cloudUpdateItem(hh, i)
+  })
   return template.name
 }
 
@@ -498,21 +616,27 @@ export function startTripFromTemplate(
     }))
     .filter((i) => i.sectionId)
 
-  setState({
-    ...state,
-    lists: [
-      ...state.lists,
-      {
-        id: tripId,
-        name: name.trim() || defaultTripName(templateId),
-        kind: 'trip',
-        templateId,
-        createdAt: Date.now(),
-      },
-    ],
-    sections: [...state.sections, ...newSections],
-    items: [...state.items, ...newItems],
-  })
+  const newList = {
+    id: tripId,
+    name: name.trim() || defaultTripName(templateId),
+    kind: 'trip' as const,
+    templateId,
+    createdAt: Date.now(),
+  }
+
+  setState(
+    {
+      ...state,
+      lists: [...state.lists, newList],
+      sections: [...state.sections, ...newSections],
+      items: [...state.items, ...newItems],
+    },
+    async (hh) => {
+      await cloudInsertList(hh, newList)
+      await cloudInsertSections(hh, newSections)
+      await cloudInsertItems(hh, newItems)
+    },
+  )
   return tripId
 }
 
@@ -522,27 +646,28 @@ export function createTemplate(name: string): string | null {
   if (!trimmed) return null
   const listId = newId()
   const sectionId = newId()
-  setState({
-    ...state,
-    lists: [
-      ...state.lists,
-      {
-        id: listId,
-        name: trimmed,
-        kind: 'template',
-        createdAt: Date.now(),
-      },
-    ],
-    sections: [
-      ...state.sections,
-      {
-        id: sectionId,
-        listId,
-        name: 'General',
-        position: 1000,
-      },
-    ],
-  })
+  const newList = {
+    id: listId,
+    name: trimmed,
+    kind: 'template' as const,
+    createdAt: Date.now(),
+  }
+  const newSection = {
+    id: sectionId,
+    listId,
+    name: 'General',
+    position: 1000,
+  }
+  setState(
+    {
+      ...state,
+      lists: [...state.lists, newList],
+      sections: [...state.sections, newSection],
+    },
+    async (hh) => {
+      await cloudInsertList(hh, newList)
+      await cloudInsertSections(hh, [newSection])
+    },
+  )
   return listId
 }
-
