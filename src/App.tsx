@@ -2,6 +2,7 @@ import { Home } from './screens/Home'
 import { ListScreen } from './screens/ListScreen'
 import { PersonChooser } from './screens/PersonChooser'
 import { Toast } from './components/Toast'
+import { SheetProvider } from './sheets/SheetProvider'
 import { useMe } from './store/useMe'
 import { useView } from './store/useNav'
 
@@ -19,9 +20,9 @@ export default function App() {
   }
 
   return (
-    <>
+    <SheetProvider>
       {screen}
       <Toast />
-    </>
+    </SheetProvider>
   )
 }

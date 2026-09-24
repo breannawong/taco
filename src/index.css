@@ -328,6 +328,17 @@ h3 {
   flex: 1;
 }
 
+.btn-danger {
+  color: var(--danger);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.btn-danger.armed {
+  background: var(--danger);
+  color: var(--on-fill);
+  border-color: var(--danger);
+}
 
 .empty {
   padding: 18px 16px;
@@ -799,4 +810,180 @@ ul.items {
   font-size: 24px;
   color: var(--ink);
   margin-bottom: 6px;
+}
+
+/* bottom sheets */
+#sheetWrap {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+}
+
+.sheet {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  max-height: 88%;
+  overflow: auto;
+  background: var(--surface);
+  border-radius: 22px 22px 0 0;
+  box-shadow: var(--shadow);
+  padding: 10px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sheet {
+    animation: up 0.22s ease;
+  }
+}
+
+@keyframes up {
+  from {
+    transform: translateY(24px);
+    opacity: 0.4;
+  }
+}
+
+.grab {
+  width: 40px;
+  height: 5px;
+  border-radius: 9px;
+  background: var(--line);
+  margin: 0 auto 10px;
+}
+
+.sheet h3 {
+  font-size: 22px;
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.field > label,
+.field legend {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0;
+}
+
+fieldset.field {
+  border: 0;
+  margin: 0 0 14px;
+  padding: 0;
+  min-width: 0;
+}
+
+.in {
+  height: 48px;
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  background: var(--bg);
+  padding: 0 12px;
+  font-size: 17px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.in:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.who-seg {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.who-seg label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.who-seg input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.who-seg label:has(input:checked) {
+  border-color: var(--ink);
+  background: var(--surface-2);
+}
+
+.who-seg label:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.who-ico {
+  display: flex;
+  gap: 3px;
+  flex: none;
+}
+
+.who-ico .lg-box,
+.who-ico .lg-dot {
+  width: 14px;
+  height: 14px;
+}
+
+.hint {
+  font-size: 14px;
+  color: var(--ink-2);
+  margin: 8px 0 0;
+}
+
+.sheet-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.minor {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.minor .btn {
+  height: 40px;
+  font-size: 14px;
+  padding: 0 14px;
+}
+
+.menu-list {
+  display: grid;
+  gap: 8px;
+}
+
+.menu-list .btn {
+  justify-content: flex-start;
+  height: 52px;
 }

@@ -14,7 +14,10 @@ import {
 import { useStore } from '../store/useStore'
 import { goHome, isCollapsed, setFilter, toggleCollapsed } from '../store/nav'
 import { useCollapsedSnapshot, useFilter } from '../store/useNav'
-import { toast } from '../toast'
+import { useSheet } from '../sheets/SheetProvider'
+import { ItemSheet } from '../sheets/ItemSheet'
+import { SectionSheet } from '../sheets/SectionSheet'
+import { ListMenuSheet } from '../sheets/ListMenuSheet'
 
 type Props = {
   listId: string
@@ -31,6 +34,7 @@ export function ListScreen({ listId, me }: Props) {
   const data = useStore()
   const filter = useFilter()
   useCollapsedSnapshot()
+  const { openSheet } = useSheet()
 
   const list = data.lists.find((l) => l.id === listId)
 
@@ -54,8 +58,6 @@ export function ListScreen({ listId, me }: Props) {
   const listItems = data.items.filter((i) => i.listId === listId)
   const listChecks = data.checks.filter((c) => c.listId === listId)
   const st = trip ? progress(listId, data.items, data.checks, data.people) : null
-
-  const later = () => toast('Editing comes next')
 
   let shownTotal = 0
 
@@ -97,7 +99,9 @@ export function ListScreen({ listId, me }: Props) {
             type="button"
             className="icon-btn"
             aria-label={`Edit section ${section.name}`}
-            onClick={later}
+            onClick={() =>
+              openSheet(<SectionSheet listId={listId} sectionId={section.id} />)
+            }
           >
             <IconDots />
           </button>
@@ -124,7 +128,13 @@ export function ListScreen({ listId, me }: Props) {
                 className={`row ${done ? 'done' : ''}`}
                 data-row={item.id}
               >
-                <button type="button" className="row-main" onClick={later}>
+                <button
+                  type="button"
+                  className="row-main"
+                  onClick={() =>
+                    openSheet(<ItemSheet listId={listId} itemId={item.id} />)
+                  }
+                >
                   <span className="txt">{item.text}</span>
                   <span className="meta">
                     {whoLabel(item, data.people)}
@@ -148,7 +158,15 @@ export function ListScreen({ listId, me }: Props) {
           })}
         </ul>
         {activeFilter === 'all' ? (
-          <button type="button" className="add-row" onClick={later}>
+          <button
+            type="button"
+            className="add-row"
+            onClick={() =>
+              openSheet(
+                <ItemSheet listId={listId} sectionId={section.id} />,
+              )
+            }
+          >
             <IconPlus size={18} />
             Add to {section.name}
           </button>
@@ -181,7 +199,7 @@ export function ListScreen({ listId, me }: Props) {
             type="button"
             className="icon-btn"
             aria-label="List options"
-            onClick={later}
+            onClick={() => openSheet(<ListMenuSheet listId={listId} />)}
           >
             <IconDots />
           </button>
@@ -252,7 +270,11 @@ export function ListScreen({ listId, me }: Props) {
 
         {activeFilter === 'all' ? (
           <div className="add-sec">
-            <button type="button" className="btn btn-ghost" onClick={later}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => openSheet(<SectionSheet listId={listId} />)}
+            >
               <IconPlus size={18} />
               New section
             </button>
