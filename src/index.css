@@ -84,10 +84,13 @@ body {
   font-family: var(--body);
   font-size: 16px;
   line-height: 1.4;
-  padding-inline: 16px;
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
   -webkit-tap-highlight-color: transparent;
+  /* Avoid rubber-band overscroll flash behind the app chrome */
+  overscroll-behavior-y: none;
 }
 
 button,
@@ -138,11 +141,13 @@ h3 {
 /* header */
 .top {
   position: sticky;
-  top: env(safe-area-inset-top, 0px);
+  top: 0;
   z-index: 5;
   background: var(--bg);
-  margin-inline: -16px;
-  padding: 12px 16px 10px;
+  margin-inline: calc(-1 * max(16px, env(safe-area-inset-left, 0px)))
+    calc(-1 * max(16px, env(safe-area-inset-right, 0px)));
+  padding: 12px max(16px, env(safe-area-inset-right, 0px)) 10px
+    max(16px, env(safe-area-inset-left, 0px));
   border-bottom: 1px solid var(--line);
 }
 
@@ -647,14 +652,16 @@ ul.items {
 }
 
 .drag-handle {
-  width: 36px;
-  height: 40px;
+  width: 40px;
+  height: 44px;
   display: grid;
   place-items: center;
   flex: none;
   color: var(--ink-2);
   border-radius: 10px;
   touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
   cursor: grab;
 }
 
@@ -670,6 +677,13 @@ ul.items {
 .drag-handle svg {
   width: 18px;
   height: 18px;
+}
+
+html.is-dragging,
+html.is-dragging body {
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
 }
 
 .drag-overlay {

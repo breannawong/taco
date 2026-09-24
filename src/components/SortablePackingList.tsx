@@ -3,7 +3,6 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
-  TouchSensor,
   closestCenter,
   useSensor,
   useSensors,
@@ -115,11 +114,23 @@ export function SortablePackingList({
   }, [sections, visibleItems, activeId])
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 180, tolerance: 6 },
+    // Pointer covers mouse + touch. Distance (not delay) so the page
+    // doesn't rubber-band-scroll while waiting to start a drag.
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
     }),
   )
+
+  const lockScroll = () => {
+    document.documentElement.classList.add('is-dragging')
+  }
+  const unlockScroll = () => {
+    document.documentElement.classList.remove('is-dragging')
+  }
+
+  useEffect(() => {
+    return () => unlockScroll()
+  }, [])
 
   const itemById = useMemo(() => {
     const m = new Map<string, Item>()
@@ -153,6 +164,7 @@ export function SortablePackingList({
 
   const onDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id)
+    lockScroll()
   }
 
   const onDragOver = (event: DragOverEvent) => {
@@ -201,6 +213,7 @@ export function SortablePackingList({
     const currentMap = itemsBySectionRef.current
     const currentSections = sectionOrderRef.current
     setActiveId(null)
+    unlockScroll()
     if (!over) return
 
     const a = parseDragId(active.id)
@@ -253,6 +266,7 @@ export function SortablePackingList({
 
   const onDragCancel = () => {
     setActiveId(null)
+    unlockScroll()
     setSectionOrderLocal(sections.map((s) => s.id))
     setItemsBySection(buildItemsBySection(sections, visibleItems))
   }
