@@ -49,6 +49,13 @@ export function setMe(id: PersonId): void {
   emit()
 }
 
+/** Clear packing-as (used on sign-out / unlinked account). */
+export function clearMe(): void {
+  me = null
+  persistMe(null)
+  emit()
+}
+
 /** Flip between Dustin and Brea. */
 export function cycleMe(): PersonId {
   const i = PEOPLE.findIndex((p) => p.id === me)

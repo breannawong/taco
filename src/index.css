@@ -407,6 +407,25 @@ h3 {
   color: var(--ink-2);
 }
 
+.sign-in {
+  display: grid;
+  gap: 0;
+  margin-top: 24px;
+  text-align: left;
+}
+
+.sign-in .btn {
+  margin-top: 4px;
+  width: 100%;
+}
+
+.sign-in-error {
+  color: var(--danger);
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+
 .who-pick {
   display: grid;
   gap: 10px;

@@ -112,7 +112,7 @@ Do one step per request, then stop and report. Host the frontend on **Netlify** 
 
 1. **Schema + project skeleton.** SQL migration matching the flat data model; `.env.example`; Stage 3 notes. (No app library yet until we ask.)
 2. **GitHub + empty Supabase project.** Push `main` to Breanna’s GitHub; create a Supabase project; run the migration; create Dustin and Brea users in the Auth dashboard (email + password).
-3. **Supabase client + auth UI.** Ask before adding `@supabase/supabase-js`. Sign-in screen with email + password (`signInWithPassword` only — no sign-up). Persist the session so the PWA stays logged in. Map each login to a household member (`dustin` / `brea`).
+3. **Supabase client + auth UI.** `@supabase/supabase-js` for talking to the project. Sign-in screen with email + password (`signInWithPassword` only — no sign-up). Persist the session so the PWA stays logged in. Map each login to a household member (`dustin` / `brea`) via `profiles`.
 4. **Wire reads/writes through Supabase.** Swap `src/store/` persistence (localStorage becomes fallback or dev-only); keep components talking only to the store.
 5. **Realtime checks.** Subscribe so both phones see pack/unpack live.
 6. **Netlify deploy.** Connect the GitHub repo; build `npm run build`, publish `dist`; set env vars; both Add to Home Screen from the HTTPS URL.
