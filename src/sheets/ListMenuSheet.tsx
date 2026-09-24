@@ -9,6 +9,7 @@ import {
 import { useStore } from '../store/useStore'
 import { goHome } from '../store/nav'
 import { useSheet } from './SheetProvider'
+import { StartPackSheet } from './StartPackSheet'
 import { toast } from '../toast'
 
 type Props = {
@@ -17,7 +18,7 @@ type Props = {
 
 export function ListMenuSheet({ listId }: Props) {
   const data = useStore()
-  const { closeSheet } = useSheet()
+  const { closeSheet, openSheet } = useSheet()
   const list = data.lists.find((l) => l.id === listId)
   const [name, setName] = useState(list?.name ?? '')
 
@@ -68,10 +69,7 @@ export function ListMenuSheet({ listId }: Props) {
           <button
             type="button"
             className="btn btn-ghost"
-            onClick={() => {
-              closeSheet()
-              toast('Starting packs comes next')
-            }}
+            onClick={() => openSheet(<StartPackSheet templateId={listId} />)}
           >
             Start a pack from this template
           </button>

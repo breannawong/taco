@@ -387,3 +387,108 @@ export function promoteItems(listId: string, itemIds: string[]): string | null {
   setState({ ...state, sections, items })
   return template.name
 }
+
+export function monthLabel(date = new Date()): string {
+  return date.toLocaleString('en-US', { month: 'short' }) + ' ' + date.getFullYear()
+}
+
+/** Default trip name from a template, e.g. "Hiking · Sep 2026". */
+export function defaultTripName(templateId: string): string {
+  const tpl = state.lists.find((l) => l.id === templateId)
+  if (!tpl) return `Trip · ${monthLabel()}`
+  const base =
+    tpl.name.replace(/\s*packing list\s*/i, '').trim() || tpl.name
+  return `${base} · ${monthLabel()}`
+}
+
+/**
+ * Copy a template into a fresh trip (new section/item ids, sourceSectionId links,
+ * no checks, no tripOnly). Returns the new trip id.
+ */
+export function startTripFromTemplate(
+  templateId: string,
+  name: string,
+): string | null {
+  const template = state.lists.find(
+    (l) => l.id === templateId && l.kind === 'template',
+  )
+  if (!template) return null
+
+  const tripId = newId()
+  const tplSections = state.sections
+    .filter((s) => s.listId === templateId)
+    .sort((a, b) => a.position - b.position)
+  const sectionIdMap = new Map<string, string>()
+
+  const newSections = tplSections.map((s) => {
+    const id = newId()
+    sectionIdMap.set(s.id, id)
+    return {
+      id,
+      listId: tripId,
+      name: s.name,
+      position: s.position,
+      sourceSectionId: s.id,
+    }
+  })
+
+  const newItems = state.items
+    .filter((i) => i.listId === templateId)
+    .map((i) => ({
+      id: newId(),
+      listId: tripId,
+      sectionId: sectionIdMap.get(i.sectionId)!,
+      text: i.text,
+      who: i.who,
+      position: i.position,
+    }))
+    .filter((i) => i.sectionId)
+
+  setState({
+    ...state,
+    lists: [
+      ...state.lists,
+      {
+        id: tripId,
+        name: name.trim() || defaultTripName(templateId),
+        kind: 'trip',
+        templateId,
+        createdAt: Date.now(),
+      },
+    ],
+    sections: [...state.sections, ...newSections],
+    items: [...state.items, ...newItems],
+  })
+  return tripId
+}
+
+/** Create an empty template with a General section. Returns the new list id. */
+export function createTemplate(name: string): string | null {
+  const trimmed = name.trim()
+  if (!trimmed) return null
+  const listId = newId()
+  const sectionId = newId()
+  setState({
+    ...state,
+    lists: [
+      ...state.lists,
+      {
+        id: listId,
+        name: trimmed,
+        kind: 'template',
+        createdAt: Date.now(),
+      },
+    ],
+    sections: [
+      ...state.sections,
+      {
+        id: sectionId,
+        listId,
+        name: 'General',
+        position: 1000,
+      },
+    ],
+  })
+  return listId
+}
+

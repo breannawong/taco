@@ -6,6 +6,9 @@ import { progress, resetSampleData } from '../store'
 import { useStore } from '../store/useStore'
 import { openList } from '../store/nav'
 import type { PersonId } from '../store'
+import { useSheet } from '../sheets/SheetProvider'
+import { StartPackSheet } from '../sheets/StartPackSheet'
+import { NewTemplateSheet } from '../sheets/NewTemplateSheet'
 import { toast } from '../toast'
 
 type Props = {
@@ -14,6 +17,7 @@ type Props = {
 
 export function Home({ me }: Props) {
   const data = useStore()
+  const { openSheet } = useSheet()
 
   const trips = data.lists
     .filter((l) => l.kind === 'trip')
@@ -22,8 +26,6 @@ export function Home({ me }: Props) {
   const templates = data.lists
     .filter((l) => l.kind === 'template')
     .sort((a, b) => a.name.localeCompare(b.name))
-
-  const later = () => toast('Starting packs and new templates come next')
 
   return (
     <>
@@ -82,7 +84,8 @@ export function Home({ me }: Props) {
           <div className="tlist">
             {templates.map((list) => {
               const itemCount = data.items.filter((i) => i.listId === list.id).length
-              const sectionCount = data.sections.filter((s) => s.listId === list.id).length
+              const sectionCount = data.sections.filter((s) => s.listId === list.id)
+                .length
               return (
                 <button
                   type="button"
@@ -104,11 +107,25 @@ export function Home({ me }: Props) {
         )}
 
         <div className="btns">
-          <button type="button" className="btn btn-primary btn-wide" onClick={later}>
+          <button
+            type="button"
+            className="btn btn-primary btn-wide"
+            onClick={() => {
+              if (templates.length === 0) {
+                toast('Make a template first')
+                return
+              }
+              openSheet(<StartPackSheet />)
+            }}
+          >
             <IconPlus />
             Start a pack
           </button>
-          <button type="button" className="btn btn-ghost" onClick={later}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => openSheet(<NewTemplateSheet />)}
+          >
             New template
           </button>
         </div>
