@@ -1,6 +1,10 @@
-export function TacoLogo() {
+type Props = {
+  className?: string
+}
+
+export function TacoLogo({ className }: Props) {
   return (
-    <svg viewBox="0 0 40 40" aria-hidden="true">
+    <svg className={className} viewBox="0 0 40 40" aria-hidden="true">
       <path d="M4 17a16 16 0 0 0 32 0z" fill="var(--accent)" />
       <path
         d="M4 17c2-4 4-4 5.3 0s3.4 4 5.3 0 3.4-4 5.4 0 3.4 4 5.3 0 3.4-4 5.4 0 3.3 4 5.3 0"
