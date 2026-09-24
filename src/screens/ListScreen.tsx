@@ -1,18 +1,17 @@
 import { useEffect } from 'react'
 import { PackingAsButton } from '../components/PackingAsButton'
 import { ProgressRows } from '../components/ProgressRows'
-import { ItemChecks } from '../components/ItemChecks'
-import { IconBack, IconChev, IconDots, IconPlus } from '../components/Icons'
+import { SortablePackingList } from '../components/SortablePackingList'
+import { IconBack, IconDots, IconPlus } from '../components/Icons'
 import {
   doneFor,
   isDone,
   owes,
   progress,
-  whoLabel,
   type PersonId,
 } from '../store'
 import { useStore } from '../store/useStore'
-import { goHome, isCollapsed, setFilter, toggleCollapsed } from '../store/nav'
+import { goHome, setFilter } from '../store/nav'
 import { useCollapsedSnapshot, useFilter } from '../store/useNav'
 import { useSheet } from '../sheets/SheetProvider'
 import { ItemSheet } from '../sheets/ItemSheet'
@@ -46,6 +45,7 @@ export function ListScreen({ listId, me }: Props) {
 
   const trip = list.kind === 'trip'
   const activeFilter = trip ? filter : 'all'
+  const canDrag = activeFilter === 'all'
   const fromName =
     trip && list.templateId
       ? data.lists.find((l) => l.id === list.templateId)?.name
@@ -59,121 +59,13 @@ export function ListScreen({ listId, me }: Props) {
   const listChecks = data.checks.filter((c) => c.listId === listId)
   const st = trip ? progress(listId, data.items, data.checks, data.people) : null
 
-  let shownTotal = 0
-
-  const sectionBlocks = sections.map((section) => {
-    const allInSection = listItems
-      .filter((i) => i.sectionId === section.id)
-      .sort((a, b) => a.position - b.position)
-
-    const visible = allInSection.filter((item) => {
-      if (activeFilter === 'all') return true
-      if (activeFilter === 'left') return !isDone(item, listChecks, data.people)
-      return owes(item, me) && !doneFor(item, listChecks, me, data.people)
-    })
-
-    shownTotal += visible.length
-    if (activeFilter !== 'all' && visible.length === 0) return null
-
-    const doneN = allInSection.filter((item) =>
-      isDone(item, listChecks, data.people),
-    ).length
-    const closed = isCollapsed(listId, section.id)
-
-    return (
-      <section key={section.id} className={`sec ${closed ? 'closed' : ''}`}>
-        <div className="sec-h">
-          <button
-            type="button"
-            className="sec-toggle"
-            aria-expanded={!closed}
-            onClick={() => toggleCollapsed(listId, section.id)}
-          >
-            <IconChev />
-            <h2>{section.name}</h2>
-          </button>
-          <span className="count">
-            {trip ? `${doneN}/${allInSection.length}` : allInSection.length}
-          </span>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label={`Edit section ${section.name}`}
-            onClick={() =>
-              openSheet(<SectionSheet listId={listId} sectionId={section.id} />)
-            }
-          >
-            <IconDots />
-          </button>
-        </div>
-        <ul className="items">
-          {visible.map((item) => {
-            const done = trip && isDone(item, listChecks, data.people)
-            const packers =
-              trip && item.who === 'shared' && done
-                ? data.people.filter((p) =>
-                    listChecks.some(
-                      (c) => c.itemId === item.id && c.personId === p.id,
-                    ),
-                  )
-                : []
-            const by =
-              packers.length > 0
-                ? ` · packed by ${packers.map((p) => p.name).join(' & ')}`
-                : ''
-
-            return (
-              <li
-                key={item.id}
-                className={`row ${done ? 'done' : ''}`}
-                data-row={item.id}
-              >
-                <button
-                  type="button"
-                  className="row-main"
-                  onClick={() =>
-                    openSheet(<ItemSheet listId={listId} itemId={item.id} />)
-                  }
-                >
-                  <span className="txt">{item.text}</span>
-                  <span className="meta">
-                    {whoLabel(item, data.people)}
-                    {by}
-                    {trip && item.tripOnly ? (
-                      <span className="tag">This trip</span>
-                    ) : null}
-                  </span>
-                </button>
-                <div className="checks">
-                  <ItemChecks
-                    item={item}
-                    checks={listChecks}
-                    people={data.people}
-                    me={me}
-                    interactive={trip}
-                  />
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-        {activeFilter === 'all' ? (
-          <button
-            type="button"
-            className="add-row"
-            onClick={() =>
-              openSheet(
-                <ItemSheet listId={listId} sectionId={section.id} />,
-              )
-            }
-          >
-            <IconPlus size={18} />
-            Add to {section.name}
-          </button>
-        ) : null}
-      </section>
-    )
+  const visibleItems = listItems.filter((item) => {
+    if (activeFilter === 'all') return true
+    if (activeFilter === 'left') return !isDone(item, listChecks, data.people)
+    return owes(item, me) && !doneFor(item, listChecks, me, data.people)
   })
+
+  const shownTotal = visibleItems.length
 
   return (
     <>
@@ -250,7 +142,27 @@ export function ListScreen({ listId, me }: Props) {
           </span>
         </div>
 
-        {sectionBlocks}
+        <SortablePackingList
+          listId={listId}
+          me={me}
+          trip={trip}
+          canDrag={canDrag}
+          showAddRow={activeFilter === 'all'}
+          sections={sections}
+          visibleItems={visibleItems}
+          allListItems={listItems}
+          listChecks={listChecks}
+          people={data.people}
+          onEditItem={(itemId) =>
+            openSheet(<ItemSheet listId={listId} itemId={itemId} />)
+          }
+          onEditSection={(sectionId) =>
+            openSheet(<SectionSheet listId={listId} sectionId={sectionId} />)
+          }
+          onAddItem={(sectionId) =>
+            openSheet(<ItemSheet listId={listId} sectionId={sectionId} />)
+          }
+        />
 
         {activeFilter !== 'all' && shownTotal === 0 ? (
           <div className="allpacked">

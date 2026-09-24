@@ -318,6 +318,60 @@ export function clearChecks(listId: string): void {
   })
 }
 
+/** Persist a new section order for a list (ids top → bottom). */
+export function setSectionOrder(listId: string, orderedIds: string[]): void {
+  const byId = new Map(orderedIds.map((id, i) => [id, (i + 1) * 1000]))
+  setState({
+    ...state,
+    sections: state.sections.map((s) =>
+      s.listId === listId && byId.has(s.id)
+        ? { ...s, position: byId.get(s.id)! }
+        : s,
+    ),
+  })
+}
+
+/**
+ * Move an item within or across sections.
+ * `orderedIdsInTarget` is the full item-id order for the destination section
+ * after the move (including the active item).
+ */
+export function setItemOrderInSection(
+  sectionId: string,
+  orderedIds: string[],
+): void {
+  const byId = new Map(orderedIds.map((id, i) => [id, (i + 1) * 1000]))
+  setState({
+    ...state,
+    items: state.items.map((item) => {
+      if (!byId.has(item.id)) return item
+      return {
+        ...item,
+        sectionId,
+        position: byId.get(item.id)!,
+      }
+    }),
+  })
+}
+
+/**
+ * After dragging an item out of a section, renumber the remaining items there.
+ */
+export function setItemOrderOnly(
+  sectionId: string,
+  orderedIds: string[],
+): void {
+  const byId = new Map(orderedIds.map((id, i) => [id, (i + 1) * 1000]))
+  setState({
+    ...state,
+    items: state.items.map((item) => {
+      if (item.sectionId !== sectionId || !byId.has(item.id)) return item
+      return { ...item, position: byId.get(item.id)! }
+    }),
+  })
+}
+
+
 /**
  * Copy trip-only items onto the template (matching section via sourceSectionId),
  * then clear tripOnly on the trip items.

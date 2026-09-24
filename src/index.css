@@ -646,6 +646,47 @@ ul.items {
   min-height: 56px;
 }
 
+.drag-handle {
+  width: 36px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--ink-2);
+  border-radius: 10px;
+  touch-action: none;
+  cursor: grab;
+}
+
+.drag-handle:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.drag-overlay {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+  font-weight: 700;
+  max-width: 280px;
+}
+
+.row.dragging,
+.sec.dragging {
+  z-index: 2;
+}
+
 .row-main {
   flex: 1;
   min-width: 0;
