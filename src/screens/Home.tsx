@@ -4,6 +4,7 @@ import { ProgressRows } from '../components/ProgressRows'
 import { IconGo, IconPlus } from '../components/Icons'
 import { progress, resetSampleData } from '../store'
 import { useStore } from '../store/useStore'
+import { openList } from '../store/nav'
 import type { PersonId } from '../store'
 import { toast } from '../toast'
 
@@ -22,7 +23,7 @@ export function Home({ me }: Props) {
     .filter((l) => l.kind === 'template')
     .sort((a, b) => a.name.localeCompare(b.name))
 
-  const later = () => toast('List screens and sheets come next')
+  const later = () => toast('Starting packs and new templates come next')
 
   return (
     <>
@@ -57,7 +58,7 @@ export function Home({ me }: Props) {
                   type="button"
                   className="card"
                   key={list.id}
-                  onClick={later}
+                  onClick={() => openList(list.id)}
                 >
                   <h3>{list.name}</h3>
                   <div className="sub tnum">
@@ -87,7 +88,7 @@ export function Home({ me }: Props) {
                   type="button"
                   className="trow"
                   key={list.id}
-                  onClick={later}
+                  onClick={() => openList(list.id)}
                 >
                   <div>
                     <h3>{list.name}</h3>

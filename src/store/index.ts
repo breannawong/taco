@@ -1,5 +1,5 @@
 import { createSeedData } from './seed'
-import type { StoreData } from './types'
+import type { Item, Person, PersonId, StoreData } from './types'
 
 export type { StoreData } from './types'
 export type {
@@ -15,6 +15,14 @@ export type {
 } from './types'
 export { doneFor, isDone, owes, progress } from './helpers'
 export { PEOPLE } from './seed'
+
+/** Label for the who-packs-it meta line. */
+export function whoLabel(item: Item, people: Person[]): string {
+  if (item.who === 'shared') return 'Shared'
+  if (item.who === 'each') return 'Each'
+  const person = people.find((p) => p.id === item.who)
+  return person ? `${person.name}'s` : '?'
+}
 
 const STORAGE_KEY = 'taco.v1'
 
@@ -83,4 +91,62 @@ export function subscribe(listener: Listener): () => void {
 /** Wipe local data and reload the Hiking + Utah sample. */
 export function resetSampleData(): void {
   setState(createSeedData())
+}
+
+/** Toggle one person's check on an item (each / person who). */
+export function togglePersonCheck(
+  listId: string,
+  itemId: string,
+  personId: PersonId,
+): void {
+  const existing = state.checks.some(
+    (c) => c.listId === listId && c.itemId === itemId && c.personId === personId,
+  )
+  if (existing) {
+    setState({
+      ...state,
+      checks: state.checks.filter(
+        (c) =>
+          !(c.listId === listId && c.itemId === itemId && c.personId === personId),
+      ),
+    })
+  } else {
+    setState({
+      ...state,
+      checks: [
+        ...state.checks,
+        { listId, itemId, personId, checkedAt: Date.now() },
+      ],
+    })
+  }
+}
+
+/**
+ * Shared item: if anyone checked it, clear all checks;
+ * otherwise check it as the current person.
+ */
+export function toggleSharedCheck(
+  listId: string,
+  itemId: string,
+  personId: PersonId,
+): void {
+  const anyChecked = state.checks.some(
+    (c) => c.listId === listId && c.itemId === itemId,
+  )
+  if (anyChecked) {
+    setState({
+      ...state,
+      checks: state.checks.filter(
+        (c) => !(c.listId === listId && c.itemId === itemId),
+      ),
+    })
+  } else {
+    setState({
+      ...state,
+      checks: [
+        ...state.checks,
+        { listId, itemId, personId, checkedAt: Date.now() },
+      ],
+    })
+  }
 }
