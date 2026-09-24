@@ -104,8 +104,20 @@ Do one step per request, then stop and report.
 7. **Drag to reorder** items within and between sections, and sections themselves (ask before adding a library; dnd-kit is the likely choice). Keep the Move up/down buttons as a fallback.
 8. **PWA:** manifest, app icons from the taco logo, standalone mode, safe areas. Test "Add to Home Screen" on iPhone.
 
-Stage 3 (Supabase, logins, a shared household, realtime sync, Vercel deploy) comes after step 8 and gets its own plan.
+Stage 3 (Supabase, logins, a shared household, realtime sync, Netlify deploy) comes after step 8 and gets its own plan below.
+
+## Stage 3 build plan
+
+Do one step per request, then stop and report. Host the frontend on **Netlify** (not Vercel). Repo lives on Breanna’s GitHub.
+
+1. **Schema + project skeleton.** SQL migration matching the flat data model; `.env.example`; Stage 3 notes. (No app library yet until we ask.)
+2. **GitHub + empty Supabase project.** Push `main` to Breanna’s GitHub; create a Supabase project; run the migration; turn on email OTP (6-digit codes, not magic links).
+3. **Supabase client + auth UI.** Ask before adding `@supabase/supabase-js`. Sign in with emailed code; map each login to a household member (`dustin` / `brea`).
+4. **Wire reads/writes through Supabase.** Swap `src/store/` persistence (localStorage becomes fallback or dev-only); keep components talking only to the store.
+5. **Realtime checks.** Subscribe so both phones see pack/unpack live.
+6. **Netlify deploy.** Connect the GitHub repo; build `npm run build`, publish `dist`; set env vars; both Add to Home Screen from the HTTPS URL.
+7. **Household invite polish.** How the second person joins the same household cleanly.
 
 ## Later ideas (don't build yet)
 
-Grocery-style ongoing lists (checked items sink or disappear), quantities, notes on items, trip history and archive, offline support.
+Grocery-style ongoing lists (checked items sink or disappear), quantities, notes on items, trip history and archive, offline support, import from CSV/Sheets/Keep.
