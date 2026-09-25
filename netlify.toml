@@ -1,0 +1,16 @@
+# Taco — Netlify (Stage 3 step 6)
+# Build: npm run build → publish dist
+# Set in Netlify UI (Site settings → Environment variables):
+#   VITE_SUPABASE_URL
+#   VITE_SUPABASE_PUBLISHABLE_KEY
+# (same values as local .env.local — never commit those)
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# SPA fallback (client-side view state; keeps deep links / refresh safe)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
