@@ -36,6 +36,16 @@ function whoToColumns(who: Who): { shared: boolean; for_people: string[] } {
   return { shared: false, for_people: profileId ? [profileId] : [] }
 }
 
+function normalizeForPeople(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map(String)
+  if (typeof raw === 'string') {
+    const inner = raw.trim().replace(/^\{/, '').replace(/\}$/, '')
+    if (!inner) return []
+    return inner.split(',').map((s) => s.trim().replace(/^"|"$/g, ''))
+  }
+  return []
+}
+
 function whoFromColumns(
   shared: boolean,
   forPeople: string[] | null | undefined,
@@ -49,6 +59,15 @@ function whoFromColumns(
   }
   // Multi-person subsets aren't in the UI yet; treat as Each.
   return 'each'
+}
+
+/** Prefer new columns; fall back to legacy who text if still present. */
+function itemWhoFromRow(row: Record<string, unknown>): Who {
+  if (typeof row.who === 'string' && row.who.length > 0) {
+    return row.who as Who
+  }
+  const shared = row.shared === true || row.shared === 't' || row.shared === 'true'
+  return whoFromColumns(shared, normalizeForPeople(row.for_people))
 }
 
 function listRow(householdId: string, list: List) {
@@ -203,10 +222,7 @@ export async function fetchHouseholdStore(householdId: string): Promise<StoreDat
     listId: row.list_id as string,
     sectionId: row.section_id as string,
     text: row.text as string,
-    who: whoFromColumns(
-      Boolean(row.shared),
-      row.for_people as string[] | null,
-    ),
+    who: itemWhoFromRow(row as Record<string, unknown>),
     position: row.position as number,
     createdAt: row.created_at
       ? new Date(row.created_at as string).getTime()

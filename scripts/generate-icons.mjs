@@ -39,4 +39,10 @@ await writePng('icon-192.png', tacoSvg(192, { pad: 24 }))
 await writePng('icon-512.png', tacoSvg(512, { pad: 64 }))
 await writePng('icon-512-maskable.png', tacoSvg(512, { maskable: true }))
 await writePng('apple-touch-icon.png', tacoSvg(180, { pad: 22 }))
+// Also at site root — Safari’s default discovery path for Home Screen icons
+await writeFile(
+  join(root, 'public', 'apple-touch-icon.png'),
+  await sharp(Buffer.from(tacoSvg(180, { pad: 22 }))).png().toBuffer(),
+)
+console.log('wrote public/apple-touch-icon.png')
 console.log('done')
