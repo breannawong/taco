@@ -1,5 +1,31 @@
 import type { Check, Item, ListProgress, Person, PersonId } from './types'
 
+/**
+ * Item another household member added since this person last left the list.
+ * No last-viewed yet → not "New" (avoids flooding on first open).
+ */
+export function isItemNewFor(
+  item: Item,
+  personId: PersonId,
+  lastViewedAt: number | null,
+): boolean {
+  if (lastViewedAt == null) return false
+  if (!item.createdBy || item.createdBy === personId) return false
+  return item.createdAt > lastViewedAt
+}
+
+/** Count of items on a list that are "New" for this person. */
+export function countNewItems(
+  listId: string,
+  items: Item[],
+  personId: PersonId,
+  lastViewedAt: number | null,
+): number {
+  return items.filter(
+    (i) => i.listId === listId && isItemNewFor(i, personId, lastViewedAt),
+  ).length
+}
+
 /** True if this person is responsible for packing the item. */
 export function owes(item: Item, personId: PersonId): boolean {
   return item.who === 'shared' || item.who === 'each' || item.who === personId

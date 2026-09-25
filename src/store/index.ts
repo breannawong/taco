@@ -14,11 +14,14 @@ import {
   cloudUpdateSection,
   cloudUpdateSectionPositions,
   cloudUpsertCheck,
+  cloudUpsertListView,
   fetchHouseholdStore,
   replaceHouseholdStore,
 } from './cloud'
+import { startChecksRealtime, stopChecksRealtime } from './realtime'
 import { createSeedData, PEOPLE } from './seed'
-import type { Item, Person, PersonId, StoreData, Who } from './types'
+import { getMe } from './session'
+import type { Check, Item, Person, PersonId, StoreData, Who } from './types'
 import { newId, nextPosition, renumberPositions } from './who'
 
 export type { StoreData } from './types'
@@ -33,7 +36,7 @@ export type {
   Section,
   Who,
 } from './types'
-export { doneFor, isDone, owes, progress } from './helpers'
+export { doneFor, isDone, owes, progress, isItemNewFor, countNewItems } from './helpers'
 export { PEOPLE } from './seed'
 export { WHO_OPTIONS, getLastWho, setLastWho, newId } from './who'
 
@@ -64,6 +67,7 @@ function emptyStore(people: Person[] = PEOPLE): StoreData {
     sections: [],
     items: [],
     checks: [],
+    listViews: [],
   }
 }
 
@@ -88,6 +92,13 @@ function setStatus(patch: Partial<StoreStatus>) {
   emit()
 }
 
+/** Memory + local cache only (no cloud write). Used for realtime inbound events. */
+function applyLocal(next: StoreData) {
+  state = next
+  persistLocal(state)
+  emit()
+}
+
 function setState(next: StoreData, cloud?: CloudWrite) {
   state = next
   persistLocal(state)
@@ -99,6 +110,35 @@ function setState(next: StoreData, cloud?: CloudWrite) {
       console.error('Taco cloud sync failed:', message)
     })
   }
+}
+
+function applyRemoteCheckInsert(check: Check) {
+  const exists = state.checks.some(
+    (c) => c.itemId === check.itemId && c.personId === check.personId,
+  )
+  if (exists) {
+    applyLocal({
+      ...state,
+      checks: state.checks.map((c) =>
+        c.itemId === check.itemId && c.personId === check.personId ? check : c,
+      ),
+    })
+    return
+  }
+  applyLocal({ ...state, checks: [...state.checks, check] })
+}
+
+function applyRemoteCheckDelete(itemId: string, personId: string) {
+  const exists = state.checks.some(
+    (c) => c.itemId === itemId && c.personId === personId,
+  )
+  if (!exists) return
+  applyLocal({
+    ...state,
+    checks: state.checks.filter(
+      (c) => !(c.itemId === itemId && c.personId === personId),
+    ),
+  })
 }
 
 /** Current store snapshot. Prefer useStore() in React components. */
@@ -126,6 +166,7 @@ export async function connectHousehold(householdId: string): Promise<void> {
     return
   }
 
+  stopChecksRealtime()
   setStatus({ ready: false, error: null, householdId })
 
   try {
@@ -138,8 +179,13 @@ export async function connectHousehold(householdId: string): Promise<void> {
     }
     state = data
     persistLocal(state)
+    startChecksRealtime(householdId, {
+      onInsert: applyRemoteCheckInsert,
+      onDelete: applyRemoteCheckDelete,
+    })
     setStatus({ ready: true, error: null, householdId })
   } catch (err: unknown) {
+    stopChecksRealtime()
     const message = err instanceof Error ? err.message : 'Could not load lists'
     console.error(message)
     setStatus({ ready: true, error: message, householdId })
@@ -148,6 +194,7 @@ export async function connectHousehold(householdId: string): Promise<void> {
 
 /** Clear cloud binding on sign-out. */
 export function disconnectHousehold(): void {
+  stopChecksRealtime()
   status = { ready: false, error: null, householdId: null }
   state = emptyStore()
   emit()
@@ -166,6 +213,7 @@ export function togglePersonCheck(
   listId: string,
   itemId: string,
   personId: PersonId,
+  checkedBy: PersonId,
 ): void {
   const existing = state.checks.some(
     (c) => c.listId === listId && c.itemId === itemId && c.personId === personId,
@@ -182,7 +230,13 @@ export function togglePersonCheck(
       (hh) => cloudDeleteCheck(hh, itemId, personId),
     )
   } else {
-    const check = { listId, itemId, personId, checkedAt: Date.now() }
+    const check = {
+      listId,
+      itemId,
+      personId,
+      checkedBy,
+      checkedAt: Date.now(),
+    }
     setState(
       { ...state, checks: [...state.checks, check] },
       (hh) => cloudUpsertCheck(hh, check),
@@ -213,7 +267,13 @@ export function toggleSharedCheck(
       (hh) => cloudDeleteChecksForItem(hh, itemId),
     )
   } else {
-    const check = { listId, itemId, personId, checkedAt: Date.now() }
+    const check = {
+      listId,
+      itemId,
+      personId,
+      checkedBy: personId,
+      checkedAt: Date.now(),
+    }
     setState(
       { ...state, checks: [...state.checks, check] },
       (hh) => cloudUpsertCheck(hh, check),
@@ -231,6 +291,7 @@ export function addItem(
   const siblings = state.items.filter(
     (i) => i.listId === listId && i.sectionId === sectionId,
   )
+  const me = getMe()
   const item: Item = {
     id: newId(),
     listId,
@@ -238,6 +299,8 @@ export function addItem(
     text,
     who,
     position: nextPosition(siblings),
+    createdAt: Date.now(),
+    ...(me ? { createdBy: me } : {}),
     ...(list?.kind === 'trip' ? { tripOnly: true } : {}),
   }
   setState({ ...state, items: [...state.items, item] }, (hh) =>
@@ -390,6 +453,47 @@ export function renameList(listId: string, name: string): void {
   )
 }
 
+/** Mark a trip as finished (Past trips). */
+export function archiveTrip(listId: string): void {
+  const list = state.lists.find((l) => l.id === listId)
+  if (!list || list.kind !== 'trip') return
+  const archivedAt = Date.now()
+  setState(
+    {
+      ...state,
+      lists: state.lists.map((l) =>
+        l.id === listId ? { ...l, archivedAt } : l,
+      ),
+    },
+    (hh) =>
+      cloudUpdateList(hh, listId, {
+        archived_at: new Date(archivedAt).toISOString(),
+      }),
+  )
+}
+
+/** Bring an archived trip back to Packing now. */
+export function restoreTrip(listId: string): void {
+  const list = state.lists.find((l) => l.id === listId)
+  if (!list || list.kind !== 'trip') return
+  setState(
+    {
+      ...state,
+      lists: state.lists.map((l) => {
+        if (l.id !== listId) return l
+        return {
+          id: l.id,
+          name: l.name,
+          kind: l.kind,
+          createdAt: l.createdAt,
+          ...(l.templateId ? { templateId: l.templateId } : {}),
+        }
+      }),
+    },
+    (hh) => cloudUpdateList(hh, listId, { archived_at: null }),
+  )
+}
+
 export function deleteList(listId: string): void {
   setState(
     {
@@ -398,8 +502,33 @@ export function deleteList(listId: string): void {
       sections: state.sections.filter((s) => s.listId !== listId),
       items: state.items.filter((i) => i.listId !== listId),
       checks: state.checks.filter((c) => c.listId !== listId),
+      listViews: state.listViews.filter((v) => v.listId !== listId),
     },
     (hh) => cloudDeleteList(hh, listId),
+  )
+}
+
+/** Record that this person left the list (drives "New" for next visit). */
+export function markListViewed(listId: string, personId: PersonId): void {
+  const lastViewedAt = Date.now()
+  const row = { listId, personId, lastViewedAt }
+  const listViews = [
+    ...state.listViews.filter(
+      (v) => !(v.listId === listId && v.personId === personId),
+    ),
+    row,
+  ]
+  setState({ ...state, listViews }, (hh) => cloudUpsertListView(hh, row))
+}
+
+export function getLastViewedAt(
+  listId: string,
+  personId: PersonId,
+): number | null {
+  return (
+    state.listViews.find(
+      (v) => v.listId === listId && v.personId === personId,
+    )?.lastViewedAt ?? null
   )
 }
 
@@ -534,6 +663,7 @@ export function promoteItems(listId: string, itemIds: string[]): string | null {
     const tplSiblings = items.filter(
       (i) => i.listId === templateId && i.sectionId === templateSectionId,
     )
+    const me = getMe()
     const added = {
       id: newId(),
       listId: templateId,
@@ -541,6 +671,12 @@ export function promoteItems(listId: string, itemIds: string[]): string | null {
       text: tripItem.text,
       who: tripItem.who,
       position: nextPosition(tplSiblings),
+      createdAt: Date.now(),
+      ...(tripItem.createdBy
+        ? { createdBy: tripItem.createdBy }
+        : me
+          ? { createdBy: me }
+          : {}),
     }
     items = [...items, added]
     newItems.push(added)
@@ -604,6 +740,7 @@ export function startTripFromTemplate(
     }
   })
 
+  const now = Date.now()
   const newItems = state.items
     .filter((i) => i.listId === templateId)
     .map((i) => ({
@@ -613,6 +750,7 @@ export function startTripFromTemplate(
       text: i.text,
       who: i.who,
       position: i.position,
+      createdAt: now,
     }))
     .filter((i) => i.sectionId)
 

@@ -1,5 +1,14 @@
 import { supabase } from '../lib/supabase'
-import type { Check, Item, List, Person, Section, StoreData, Who } from './types'
+import type {
+  Check,
+  Item,
+  List,
+  ListView,
+  Person,
+  Section,
+  StoreData,
+  Who,
+} from './types'
 
 function throwIfError(error: { message: string } | null, label: string) {
   if (error) throw new Error(`${label}: ${error.message}`)
@@ -13,6 +22,7 @@ function listRow(householdId: string, list: List) {
     kind: list.kind,
     template_id: list.templateId ?? null,
     created_at: new Date(list.createdAt).toISOString(),
+    archived_at: list.archivedAt != null ? new Date(list.archivedAt).toISOString() : null,
   }
 }
 
@@ -37,6 +47,8 @@ function itemRow(householdId: string, item: Item) {
     who: item.who,
     position: item.position,
     trip_only: Boolean(item.tripOnly),
+    created_at: new Date(item.createdAt).toISOString(),
+    created_by: item.createdBy ?? null,
   }
 }
 
@@ -47,6 +59,7 @@ function checkRow(householdId: string, check: Check) {
     item_id: check.itemId,
     person_id: check.personId,
     checked_at: new Date(check.checkedAt).toISOString(),
+    checked_by: check.checkedBy ?? check.personId,
   }
 }
 
@@ -74,17 +87,19 @@ export async function fetchHouseholdPeople(householdId: string): Promise<Person[
 export async function fetchHouseholdStore(householdId: string): Promise<StoreData> {
   const people = await fetchHouseholdPeople(householdId)
 
-  const [listsRes, sectionsRes, itemsRes, checksRes] = await Promise.all([
+  const [listsRes, sectionsRes, itemsRes, checksRes, viewsRes] = await Promise.all([
     supabase.from('lists').select('*').eq('household_id', householdId),
     supabase.from('sections').select('*').eq('household_id', householdId),
     supabase.from('items').select('*').eq('household_id', householdId),
     supabase.from('checks').select('*').eq('household_id', householdId),
+    supabase.from('list_views').select('*').eq('household_id', householdId),
   ])
 
   throwIfError(listsRes.error, 'load lists')
   throwIfError(sectionsRes.error, 'load sections')
   throwIfError(itemsRes.error, 'load items')
   throwIfError(checksRes.error, 'load checks')
+  throwIfError(viewsRes.error, 'load list views')
 
   const lists: List[] = (listsRes.data ?? []).map((row) => ({
     id: row.id as string,
@@ -92,6 +107,9 @@ export async function fetchHouseholdStore(householdId: string): Promise<StoreDat
     kind: row.kind as List['kind'],
     ...(row.template_id ? { templateId: row.template_id as string } : {}),
     createdAt: new Date(row.created_at as string).getTime(),
+    ...(row.archived_at
+      ? { archivedAt: new Date(row.archived_at as string).getTime() }
+      : {}),
   }))
 
   const sections: Section[] = (sectionsRes.data ?? []).map((row) => ({
@@ -111,7 +129,13 @@ export async function fetchHouseholdStore(householdId: string): Promise<StoreDat
     text: row.text as string,
     who: row.who as Who,
     position: row.position as number,
+    createdAt: row.created_at
+      ? new Date(row.created_at as string).getTime()
+      : 0,
     ...(row.trip_only ? { tripOnly: true } : {}),
+    ...((row.created_by as string | null)
+      ? { createdBy: row.created_by as string }
+      : {}),
   }))
 
   const checks: Check[] = (checksRes.data ?? []).map((row) => ({
@@ -119,9 +143,18 @@ export async function fetchHouseholdStore(householdId: string): Promise<StoreDat
     itemId: row.item_id as string,
     personId: row.person_id as string,
     checkedAt: new Date(row.checked_at as string).getTime(),
+    ...((row.checked_by as string | null)
+      ? { checkedBy: row.checked_by as string }
+      : {}),
   }))
 
-  return { people, lists, sections, items, checks }
+  const listViews: ListView[] = (viewsRes.data ?? []).map((row) => ({
+    listId: row.list_id as string,
+    personId: row.person_id as string,
+    lastViewedAt: new Date(row.last_viewed_at as string).getTime(),
+  }))
+
+  return { people, lists, sections, items, checks, listViews }
 }
 
 /** Wipe packing rows for a household and insert a full StoreData snapshot. */
@@ -171,6 +204,33 @@ export async function replaceHouseholdStore(
       .insert(data.checks.map((c) => checkRow(householdId, c)))
     throwIfError(error, 'insert checks')
   }
+  if (data.listViews.length > 0) {
+    const { error } = await supabase.from('list_views').insert(
+      data.listViews.map((v) => ({
+        household_id: householdId,
+        list_id: v.listId,
+        person_id: v.personId,
+        last_viewed_at: new Date(v.lastViewedAt).toISOString(),
+      })),
+    )
+    throwIfError(error, 'insert list views')
+  }
+}
+
+export async function cloudUpsertListView(
+  householdId: string,
+  view: ListView,
+): Promise<void> {
+  const { error } = await supabase.from('list_views').upsert(
+    {
+      household_id: householdId,
+      list_id: view.listId,
+      person_id: view.personId,
+      last_viewed_at: new Date(view.lastViewedAt).toISOString(),
+    },
+    { onConflict: 'list_id,person_id' },
+  )
+  throwIfError(error, 'upsert list view')
 }
 
 export async function cloudInsertList(householdId: string, list: List) {
@@ -181,7 +241,7 @@ export async function cloudInsertList(householdId: string, list: List) {
 export async function cloudUpdateList(
   householdId: string,
   listId: string,
-  patch: { name?: string },
+  patch: { name?: string; archived_at?: string | null },
 ) {
   const { error } = await supabase
     .from('lists')

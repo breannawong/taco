@@ -30,7 +30,15 @@ function loadView(): View {
 function loadFilter(): FilterId {
   try {
     const raw = localStorage.getItem(FILTER_KEY)
-    if (raw === 'all' || raw === 'left' || raw === 'mine') return raw
+    if (!raw) return 'all'
+    // Prefer JSON (how persist() writes); also accept bare strings from older builds.
+    let value: unknown = raw
+    try {
+      value = JSON.parse(raw)
+    } catch {
+      // bare string
+    }
+    if (value === 'all' || value === 'left' || value === 'mine') return value
   } catch {
     // ignore
   }

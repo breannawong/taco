@@ -1,8 +1,9 @@
+import { useState } from 'react'
 import { TacoLogo } from '../components/TacoLogo'
 import { PackingAsButton } from '../components/PackingAsButton'
 import { ProgressRows } from '../components/ProgressRows'
-import { IconGo, IconPlus } from '../components/Icons'
-import { progress, resetSampleData } from '../store'
+import { IconChev, IconGo, IconPlus } from '../components/Icons'
+import { countNewItems, progress, resetSampleData, restoreTrip } from '../store'
 import { useStore } from '../store/useStore'
 import { openList } from '../store/nav'
 import type { PersonId } from '../store'
@@ -18,10 +19,15 @@ type Props = {
 export function Home({ me }: Props) {
   const data = useStore()
   const { openSheet } = useSheet()
+  const [pastOpen, setPastOpen] = useState(false)
 
-  const trips = data.lists
-    .filter((l) => l.kind === 'trip')
+  const activeTrips = data.lists
+    .filter((l) => l.kind === 'trip' && !l.archivedAt)
     .sort((a, b) => b.createdAt - a.createdAt)
+
+  const pastTrips = data.lists
+    .filter((l) => l.kind === 'trip' && l.archivedAt)
+    .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0))
 
   const templates = data.lists
     .filter((l) => l.kind === 'template')
@@ -41,12 +47,12 @@ export function Home({ me }: Props) {
       <main className="wrap">
         <h2 className="label">Packing now</h2>
         <div className="cards">
-          {trips.length === 0 ? (
+          {activeTrips.length === 0 ? (
             <div className="empty">
               No trips yet. Start a pack from a template and everything begins unchecked.
             </div>
           ) : (
-            trips.map((list) => {
+            activeTrips.map((list) => {
               const st = progress(list.id, data.items, data.checks, data.people)
               const from = list.templateId
                 ? data.lists.find((l) => l.id === list.templateId)?.name
@@ -55,6 +61,16 @@ export function Home({ me }: Props) {
               const sub = packed
                 ? 'All packed'
                 : `${st.done} of ${st.total} items packed`
+              const lastViewed =
+                data.listViews.find(
+                  (v) => v.listId === list.id && v.personId === me,
+                )?.lastViewedAt ?? null
+              const newCount = countNewItems(
+                list.id,
+                data.items,
+                me,
+                lastViewed,
+              )
               return (
                 <button
                   type="button"
@@ -66,6 +82,9 @@ export function Home({ me }: Props) {
                   <div className="sub tnum">
                     {sub}
                     {from ? ` · from ${from}` : ''}
+                    {newCount > 0
+                      ? ` · ${newCount} new item${newCount === 1 ? '' : 's'}`
+                      : ''}
                   </div>
                   <ProgressRows progress={st} people={data.people} />
                 </button>
@@ -134,6 +153,56 @@ export function Home({ me }: Props) {
           Templates never get checked off. Each trip is a fresh copy, so there's nothing to
           uncheck before you pack.
         </p>
+
+        {pastTrips.length > 0 ? (
+          <div className="past-trips">
+            <button
+              type="button"
+              className={`past-toggle ${pastOpen ? 'open' : ''}`}
+              aria-expanded={pastOpen}
+              onClick={() => setPastOpen((o) => !o)}
+            >
+              <IconChev />
+              <span>
+                Past trips ({pastTrips.length})
+              </span>
+            </button>
+            {pastOpen ? (
+              <div className="tlist past-list">
+                {pastTrips.map((list) => {
+                  const from = list.templateId
+                    ? data.lists.find((l) => l.id === list.templateId)?.name
+                    : undefined
+                  return (
+                    <div className="past-row" key={list.id}>
+                      <button
+                        type="button"
+                        className="past-main"
+                        onClick={() => openList(list.id)}
+                      >
+                        <h3>{list.name}</h3>
+                        <div className="sub">
+                          Finished
+                          {from ? ` · from ${from}` : ''}
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost past-restore"
+                        onClick={() => {
+                          restoreTrip(list.id)
+                          toast(`Restored ${list.name}`)
+                        }}
+                      >
+                        Restore
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <p className="dev-reset">
           <button type="button" className="linkish" onClick={() => resetSampleData()}>

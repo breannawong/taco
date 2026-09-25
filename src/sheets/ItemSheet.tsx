@@ -167,7 +167,7 @@ export function ItemSheet({ listId, itemId, sectionId }: Props) {
               {trip && item.tripOnly && template ? (
                 <button
                   type="button"
-                  className="btn btn-ghost"
+                  className="btn btn-ghost btn-stack"
                   onClick={() => {
                     const name = promoteItems(listId, [item.id])
                     if (name) toast(`Added 1 item to ${name}`)
@@ -175,7 +175,8 @@ export function ItemSheet({ listId, itemId, sectionId }: Props) {
                     closeSheet()
                   }}
                 >
-                  Add to {template.name}
+                  <strong>Add to template</strong>
+                  <span className="btn-sub">{template.name}</span>
                 </button>
               ) : null}
             </div>

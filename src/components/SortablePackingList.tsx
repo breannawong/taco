@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   closestCenter,
   useSensor,
   useSensors,
@@ -22,9 +23,10 @@ import { ItemChecks } from './ItemChecks'
 import { IconChev, IconDots, IconGrip, IconPlus } from './Icons'
 import {
   isDone,
+  doneFor,
+  isItemNewFor,
   setItemOrderInSection,
   setSectionOrder,
-  whoLabel,
   type Check,
   type Item,
   type Person,
@@ -33,11 +35,80 @@ import {
 } from '../store'
 import { isCollapsed, toggleCollapsed } from '../store/nav'
 
+/** Exception meta under the item title (circles carry Shared / Each). */
+function itemRowExtras(
+  item: Item,
+  listChecks: Check[],
+  people: Person[],
+  trip: boolean,
+  hidePackedBy: boolean,
+  me: PersonId,
+  lastViewedAt: number | null,
+): { packedBy: string | null; isNew: boolean } {
+  const isNew = isItemNewFor(item, me, lastViewedAt)
+  let packedBy: string | null = null
+
+  if (!trip || hidePackedBy) return { packedBy, isNew }
+
+  const itemChecks = listChecks.filter((c) => c.itemId === item.id)
+  if (itemChecks.length === 0) return { packedBy, isNew }
+
+  const nameOf = (id: string) => people.find((p) => p.id === id)?.name
+
+  if (item.who === 'shared') {
+    const names = [
+      ...new Set(
+        itemChecks.map((c) => c.checkedBy ?? c.personId).filter(Boolean),
+      ),
+    ]
+      .map((id) => nameOf(id))
+      .filter(Boolean) as string[]
+    if (names.length > 0) packedBy = `Packed by ${names.join(' & ')}`
+  } else {
+    // Helping: tapper (checkedBy) ≠ whose slot (personId)
+    const helperIds = [
+      ...new Set(
+        itemChecks
+          .filter((c) => (c.checkedBy ?? c.personId) !== c.personId)
+          .map((c) => c.checkedBy!)
+          .filter(Boolean),
+      ),
+    ]
+    const names = helperIds
+      .map((id) => nameOf(id))
+      .filter(Boolean) as string[]
+    if (names.length > 0) packedBy = `Packed by ${names.join(' & ')}`
+  }
+
+  return { packedBy, isNew }
+}
+
+function ItemMeta({
+  packedBy,
+  isNew,
+}: {
+  packedBy: string | null
+  isNew: boolean
+}) {
+  if (!packedBy && !isNew) return null
+  return (
+    <span className="meta">
+      {packedBy ? <span className="meta-note">{packedBy}</span> : null}
+      {isNew ? <span className="tag">New</span> : null}
+    </span>
+  )
+}
+
 type Props = {
   listId: string
   me: PersonId
   trip: boolean
+  /** Drag enabled (Everything filter, or Reorder mode). */
   canDrag: boolean
+  /** Dedicated reorder UI: handles, immediate drag, checks muted. */
+  reorderMode: boolean
+  /** Archived trip: no checks / edits. */
+  readOnly?: boolean
   showAddRow: boolean
   sections: Section[]
   /** Items to show (already filtered by the parent). */
@@ -46,6 +117,11 @@ type Props = {
   allListItems: Item[]
   listChecks: Check[]
   people: Person[]
+  /** Item ids fading out of Still/Mine filters. */
+  fadingIds?: string[]
+  filterMode?: 'all' | 'left' | 'mine'
+  /** Frozen when the screen opened — New tags stay for the whole visit. */
+  lastViewedAt: number | null
   onEditItem: (itemId: string) => void
   onEditSection: (sectionId: string) => void
   onAddItem: (sectionId: string) => void
@@ -80,17 +156,51 @@ function buildItemsBySection(
   return map
 }
 
+/**
+ * Apply a new order for the visible subset while keeping hidden items
+ * (e.g. already packed in Still/Mine) in their relative slots.
+ */
+function applyVisibleOrder(
+  fullIds: string[],
+  visibleOrderedIds: string[],
+): string[] {
+  const visibleSet = new Set(visibleOrderedIds)
+  const base = [...fullIds]
+  for (const id of visibleOrderedIds) {
+    if (!base.includes(id)) base.push(id)
+  }
+  const result: string[] = []
+  let v = 0
+  for (const id of base) {
+    if (visibleSet.has(id)) {
+      const next = visibleOrderedIds[v++]
+      if (next) result.push(next)
+    } else {
+      result.push(id)
+    }
+  }
+  while (v < visibleOrderedIds.length) {
+    result.push(visibleOrderedIds[v++]!)
+  }
+  return result
+}
+
 export function SortablePackingList({
   listId,
   me,
   trip,
   canDrag,
+  reorderMode,
+  readOnly = false,
   showAddRow,
   sections,
   visibleItems,
   allListItems,
   listChecks,
   people,
+  fadingIds = [],
+  filterMode = 'all',
+  lastViewedAt,
   onEditItem,
   onEditSection,
   onAddItem,
@@ -113,11 +223,16 @@ export function SortablePackingList({
     setItemsBySection(buildItemsBySection(sections, visibleItems))
   }, [sections, visibleItems, activeId])
 
+  // Mouse for desktop; TouchSensor for iPhone (PointerSensor activates but
+  // often won't track finger movement after a long-press on iOS Safari).
   const sensors = useSensors(
-    // Pointer covers mouse + touch. Distance (not delay) so the page
-    // doesn't rubber-band-scroll while waiting to start a drag.
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 },
+    useSensor(MouseSensor, {
+      activationConstraint: reorderMode ? { distance: 4 } : { distance: 8 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: reorderMode
+        ? { distance: 6 }
+        : { delay: 500, tolerance: 8 },
     }),
   )
 
@@ -157,8 +272,26 @@ export function SortablePackingList({
   }
 
   const persistItemsBySection = (map: Record<string, string[]>) => {
-    for (const [secId, ordered] of Object.entries(map)) {
-      setItemOrderInSection(secId, ordered)
+    const claimedElsewhere = (secId: string, itemId: string) => {
+      for (const [other, ids] of Object.entries(map)) {
+        if (other !== secId && ids.includes(itemId)) return true
+      }
+      return false
+    }
+
+    for (const section of sections) {
+      const secId = section.id
+      const visibleOrdered = map[secId] ?? []
+      const fullIds = allListItems
+        .filter((i) => i.sectionId === secId && !claimedElsewhere(secId, i.id))
+        .sort((a, b) => a.position - b.position)
+        .map((i) => i.id)
+
+      for (const id of visibleOrdered) {
+        if (!fullIds.includes(id)) fullIds.push(id)
+      }
+
+      setItemOrderInSection(secId, applyVisibleOrder(fullIds, visibleOrdered))
     }
   }
 
@@ -255,7 +388,7 @@ export function SortablePackingList({
       const next = arrayMove(ids, oldIndex, newIndex)
       const nextMap = { ...currentMap, [container]: next }
       setItemsBySection(nextMap)
-      setItemOrderInSection(container, next)
+      persistItemsBySection(nextMap)
       return
     }
 
@@ -311,19 +444,22 @@ export function SortablePackingList({
     const list = (
       <ul className="items">
         {rows.map((item) => {
-          const done = trip && isDone(item, listChecks, people)
-          const packers =
-            trip && item.who === 'shared' && done
-              ? people.filter((p) =>
-                  listChecks.some(
-                    (c) => c.itemId === item.id && c.personId === p.id,
-                  ),
-                )
-              : []
-          const by =
-            packers.length > 0
-              ? ` · packed by ${packers.map((p) => p.name).join(' & ')}`
-              : ''
+          const fading = fadingIds.includes(item.id)
+          const fullyDone = trip && isDone(item, listChecks, people)
+          const mineDone =
+            trip &&
+            filterMode === 'mine' &&
+            doneFor(item, listChecks, me, people)
+          const done = fullyDone || mineDone || fading
+          const extras = itemRowExtras(
+            item,
+            listChecks,
+            people,
+            trip,
+            filterMode === 'mine',
+            me,
+            lastViewedAt,
+          )
 
           if (withDrag) {
             return (
@@ -331,11 +467,16 @@ export function SortablePackingList({
                 key={item.id}
                 item={item}
                 done={!!done}
-                by={by}
+                fading={fading}
+                packedBy={extras.packedBy}
+                isNew={extras.isNew}
                 trip={trip}
                 me={me}
                 people={people}
                 listChecks={listChecks}
+                reorderMode={reorderMode}
+                mineOnly={filterMode === 'mine'}
+                checksInteractive={trip && !reorderMode && !readOnly}
                 onEdit={() => onEditItem(item.id)}
               />
             )
@@ -344,7 +485,7 @@ export function SortablePackingList({
           return (
             <li
               key={item.id}
-              className={`row ${done ? 'done' : ''}`}
+              className={`row ${done ? 'done' : ''} ${fading ? 'fade-out' : ''}`}
               data-row={item.id}
             >
               <button
@@ -353,21 +494,16 @@ export function SortablePackingList({
                 onClick={() => onEditItem(item.id)}
               >
                 <span className="txt">{item.text}</span>
-                <span className="meta">
-                  {whoLabel(item, people)}
-                  {by}
-                  {trip && item.tripOnly ? (
-                    <span className="tag">This trip</span>
-                  ) : null}
-                </span>
+                <ItemMeta packedBy={extras.packedBy} isNew={extras.isNew} />
               </button>
-              <div className="checks">
+              <div className={`checks ${reorderMode || readOnly ? 'checks-muted' : ''}`}>
                 <ItemChecks
                   item={item}
                   checks={listChecks}
                   people={people}
                   me={me}
-                  interactive={trip}
+                  interactive={trip && !reorderMode && !readOnly}
+                  mineOnly={filterMode === 'mine'}
                 />
               </div>
             </li>
@@ -413,6 +549,7 @@ export function SortablePackingList({
         section={section}
         closed={closed}
         countLabel={countLabel}
+        reorderMode={reorderMode}
         onToggle={() => toggleCollapsed(listId, section.id)}
         onEdit={() => onEditSection(section.id)}
       >
@@ -470,6 +607,7 @@ type SectionProps = {
   section: Section
   closed: boolean
   countLabel: string
+  reorderMode: boolean
   onToggle: () => void
   onEdit: () => void
   children: ReactNode
@@ -479,6 +617,7 @@ function SortableSection({
   section,
   closed,
   countLabel,
+  reorderMode,
   onToggle,
   onEdit,
   children,
@@ -508,22 +647,29 @@ function SortableSection({
       style={style}
       className={`sec ${closed ? 'closed' : ''} ${isDragging ? 'dragging' : ''}`}
     >
-      <div className="sec-h">
-        <button
-          type="button"
-          className="drag-handle"
-          ref={setActivatorNodeRef}
-          aria-label={`Drag section ${section.name}`}
-          {...attributes}
-          {...listeners}
-        >
-          <IconGrip />
-        </button>
+      <div
+        className="sec-h"
+        ref={reorderMode ? undefined : setActivatorNodeRef}
+        {...(reorderMode ? {} : { ...attributes, ...listeners })}
+      >
+        {reorderMode ? (
+          <button
+            type="button"
+            className="drag-handle"
+            ref={setActivatorNodeRef}
+            aria-label={`Drag section ${section.name}`}
+            {...attributes}
+            {...listeners}
+          >
+            <IconGrip />
+          </button>
+        ) : null}
         <button
           type="button"
           className="sec-toggle"
           aria-expanded={!closed}
           onClick={onToggle}
+          onPointerDown={(e) => e.stopPropagation()}
         >
           <IconChev />
           <h2>{section.name}</h2>
@@ -534,6 +680,7 @@ function SortableSection({
           className="icon-btn"
           aria-label={`Edit section ${section.name}`}
           onClick={onEdit}
+          onPointerDown={(e) => e.stopPropagation()}
         >
           <IconDots />
         </button>
@@ -546,22 +693,31 @@ function SortableSection({
 type ItemRowProps = {
   item: Item
   done: boolean
-  by: string
+  fading: boolean
+  packedBy: string | null
+  isNew: boolean
   trip: boolean
   me: PersonId
   people: Person[]
   listChecks: Check[]
+  reorderMode: boolean
+  mineOnly: boolean
+  checksInteractive: boolean
   onEdit: () => void
 }
 
 function SortableItemRow({
   item,
   done,
-  by,
-  trip,
+  fading,
+  packedBy,
+  isNew,
   me,
   people,
   listChecks,
+  reorderMode,
+  mineOnly,
+  checksInteractive,
   onEdit,
 }: ItemRowProps) {
   const {
@@ -587,34 +743,46 @@ function SortableItemRow({
     <li
       ref={setNodeRef}
       style={style}
-      className={`row ${done ? 'done' : ''} ${isDragging ? 'dragging' : ''}`}
+      className={`row ${done ? 'done' : ''} ${fading ? 'fade-out' : ''} ${isDragging ? 'dragging' : ''}`}
       data-row={item.id}
     >
-      <button
-        type="button"
-        className="drag-handle"
-        ref={setActivatorNodeRef}
-        aria-label={`Drag ${item.text}`}
-        {...attributes}
-        {...listeners}
+      {reorderMode ? (
+        <button
+          type="button"
+          className="drag-handle"
+          ref={setActivatorNodeRef}
+          aria-label={`Drag ${item.text}`}
+          {...attributes}
+          {...listeners}
+        >
+          <IconGrip />
+        </button>
+      ) : null}
+      <div
+        className="row-main"
+        ref={reorderMode ? undefined : setActivatorNodeRef}
+        role="button"
+        tabIndex={0}
+        onClick={onEdit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onEdit()
+          }
+        }}
+        {...(reorderMode ? {} : { ...attributes, ...listeners })}
       >
-        <IconGrip />
-      </button>
-      <button type="button" className="row-main" onClick={onEdit}>
         <span className="txt">{item.text}</span>
-        <span className="meta">
-          {whoLabel(item, people)}
-          {by}
-          {trip && item.tripOnly ? <span className="tag">This trip</span> : null}
-        </span>
-      </button>
-      <div className="checks">
+        <ItemMeta packedBy={packedBy} isNew={isNew} />
+      </div>
+      <div className={`checks ${reorderMode || !checksInteractive ? 'checks-muted' : ''}`}>
         <ItemChecks
           item={item}
           checks={listChecks}
           people={people}
           me={me}
-          interactive={trip}
+          interactive={checksInteractive}
+          mineOnly={mineOnly}
         />
       </div>
     </li>

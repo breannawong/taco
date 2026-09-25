@@ -272,8 +272,11 @@ h3 {
 
 .card .progs {
   margin-top: 12px;
+}
+
+.progs {
   display: grid;
-  gap: 8px;
+  gap: 12px;
 }
 
 .tlist {
@@ -351,6 +354,97 @@ h3 {
   border-radius: 16px;
   color: var(--ink-2);
   font-size: 15px;
+}
+
+.finish-prompt {
+  margin: 12px 0 4px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.finish-prompt p {
+  margin: 0 0 12px;
+  font-size: 15px;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.finish-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.finish-prompt-actions .btn {
+  height: 40px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.past-trips {
+  margin-top: 28px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.past-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 0;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--ink);
+  text-align: left;
+}
+
+.past-toggle svg {
+  width: 18px;
+  height: 18px;
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+  color: var(--ink-2);
+}
+
+.past-toggle.open svg {
+  transform: rotate(0deg);
+}
+
+.past-list {
+  margin-top: 4px;
+}
+
+.past-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  min-height: 56px;
+}
+
+.past-main {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 10px 0;
+}
+
+.past-main h3 {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.past-restore {
+  flex: none;
+  height: 40px;
+  padding: 0 12px;
+  font-size: 14px;
 }
 
 /* progress */
@@ -607,6 +701,10 @@ h3 {
   gap: 6px;
   border-bottom: 2px solid var(--ink);
   padding-bottom: 6px;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: pan-y;
 }
 
 .sec-toggle {
@@ -668,6 +766,9 @@ ul.items {
   gap: 10px;
   border-bottom: 1px solid var(--line);
   min-height: 56px;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .drag-handle {
@@ -705,19 +806,31 @@ html.is-dragging body {
   touch-action: none;
 }
 
+html.is-dragging .row-main,
+html.is-dragging .sec-h {
+  touch-action: none;
+}
+
 .drag-overlay {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 12px 14px;
-  box-shadow: var(--shadow);
+  box-shadow: 0 14px 32px rgba(15, 20, 17, 0.22);
   font-weight: 700;
   max-width: 280px;
+  transform: scale(1.04);
 }
 
 .row.dragging,
 .sec.dragging {
   z-index: 2;
+  opacity: 0.35;
+}
+
+.checks-muted {
+  opacity: 0.35;
+  pointer-events: none;
 }
 
 .row-main {
@@ -727,6 +840,12 @@ html.is-dragging body {
   padding: 9px 0;
   display: grid;
   gap: 2px;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  /* pan-y keeps list scrolling; TouchSensor takes over after long-press */
+  touch-action: pan-y;
 }
 
 .txt {
@@ -741,6 +860,10 @@ html.is-dragging body {
   gap: 6px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.meta-note {
+  line-height: 1.3;
 }
 
 .tag {
@@ -760,9 +883,22 @@ html.is-dragging body {
   text-decoration-thickness: 1.5px;
 }
 
+.row.fade-out {
+  opacity: 0;
+  transition: opacity 1s ease;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row.fade-out {
+    transition: none;
+    opacity: 0.35;
+  }
+}
+
 .checks {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   justify-content: flex-end;
   min-width: 76px;
   flex: none;
@@ -828,6 +964,12 @@ html.is-dragging body {
 .chip.on i {
   background: var(--pc);
   color: var(--on-fill);
+  border-style: solid;
+}
+
+.chip.on svg {
+  width: 16px;
+  height: 16px;
 }
 
 .p-dustin {
@@ -1050,6 +1192,57 @@ fieldset.field {
   height: 40px;
   font-size: 14px;
   padding: 0 14px;
+}
+
+.btn-stack {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  height: auto !important;
+  min-height: 48px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  gap: 2px;
+  text-align: left;
+}
+
+.btn-stack strong {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.btn-sub {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-2);
+  line-height: 1.2;
+}
+
+.pick-list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  max-height: min(50vh, 320px);
+  overflow: auto;
+}
+
+.pick-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 4px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pick-row input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--pine);
+  flex: none;
 }
 
 .menu-list {

@@ -3,20 +3,22 @@ import { ConfirmButton } from '../components/ConfirmButton'
 import {
   clearChecks,
   deleteList,
-  promoteItems,
   renameList,
+  restoreTrip,
 } from '../store'
 import { useStore } from '../store/useStore'
 import { goHome } from '../store/nav'
 import { useSheet } from './SheetProvider'
 import { StartPackSheet } from './StartPackSheet'
+import { UpdateTemplateSheet } from './UpdateTemplateSheet'
 import { toast } from '../toast'
 
 type Props = {
   listId: string
+  onStartReorder: () => void
 }
 
-export function ListMenuSheet({ listId }: Props) {
+export function ListMenuSheet({ listId, onStartReorder }: Props) {
   const data = useStore()
   const { closeSheet, openSheet } = useSheet()
   const list = data.lists.find((l) => l.id === listId)
@@ -25,14 +27,13 @@ export function ListMenuSheet({ listId }: Props) {
   if (!list) return null
 
   const trip = list.kind === 'trip'
+  const archived = Boolean(list.archivedAt)
   const template =
     trip && list.templateId
       ? data.lists.find((l) => l.id === list.templateId)
       : undefined
-  const tripOnlyIds = trip
-    ? data.items
-        .filter((i) => i.listId === listId && i.tripOnly)
-        .map((i) => i.id)
+  const addedOnTrip = trip
+    ? data.items.filter((i) => i.listId === listId && i.tripOnly)
     : []
 
   const saveName = () => {
@@ -65,6 +66,31 @@ export function ListMenuSheet({ listId }: Props) {
         <button type="button" className="btn btn-primary" onClick={saveName}>
           Save name
         </button>
+        {archived && trip ? (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => {
+              restoreTrip(listId)
+              closeSheet()
+              toast(`Restored ${list.name}`)
+            }}
+          >
+            Restore trip
+          </button>
+        ) : null}
+        {!archived ? (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => {
+              closeSheet()
+              onStartReorder()
+            }}
+          >
+            Reorder
+          </button>
+        ) : null}
         {!trip ? (
           <button
             type="button"
@@ -74,29 +100,27 @@ export function ListMenuSheet({ listId }: Props) {
             Start a pack from this template
           </button>
         ) : null}
-        {trip && template && tripOnlyIds.length > 0 ? (
+        {trip && !archived ? (
           <button
             type="button"
             className="btn btn-ghost"
-            onClick={() => {
-              const tplName = promoteItems(listId, tripOnlyIds)
-              closeSheet()
-              if (tplName) {
-                toast(
-                  `Added ${
-                    tripOnlyIds.length === 1
-                      ? '1 item'
-                      : `${tripOnlyIds.length} items`
-                  } to ${tplName}`,
-                )
-              }
-            }}
+            onClick={() =>
+              openSheet(<UpdateTemplateSheet listId={listId} mode="finish" />)
+            }
           >
-            Add {tripOnlyIds.length} trip-only item
-            {tripOnlyIds.length > 1 ? 's' : ''} to {template.name}
+            Finish trip
           </button>
         ) : null}
-        {trip ? (
+        {trip && !archived && template && addedOnTrip.length > 0 ? (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => openSheet(<UpdateTemplateSheet listId={listId} />)}
+          >
+            Update template…
+          </button>
+        ) : null}
+        {trip && !archived ? (
           <ConfirmButton
             className="btn btn-ghost"
             confirmLabel="Tap again to uncheck all"

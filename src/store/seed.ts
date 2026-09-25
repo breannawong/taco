@@ -132,6 +132,7 @@ function buildSampleData(): StoreData {
       text: def.text,
       who: def.who,
       position: def.position,
+      createdAt: 1758000000000,
     })
   }
 
@@ -145,7 +146,8 @@ function buildSampleData(): StoreData {
       text: def.text,
       who: def.who,
       position: def.position,
-      ...(def.tripOnly ? { tripOnly: true } : {}),
+      createdAt: 1790000000000,
+      ...(def.tripOnly ? { tripOnly: true, createdBy: 'brea' as const } : {}),
     })
   }
 
@@ -163,6 +165,7 @@ function buildSampleData(): StoreData {
     sections,
     items,
     checks,
+    listViews: [],
   }
 }
 

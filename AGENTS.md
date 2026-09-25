@@ -19,15 +19,21 @@ Dustin is building Taco as his first app and is new to code. His wife Brea is a 
 ## Core ideas (get these right, everything else layers on)
 
 1. **Templates vs. trips.** A template is the master list (e.g. "Hiking Packing List"). It never gets checked off. Starting a pack makes a trip: a fresh copy of the template with nothing checked. No more "uncheck all."
-2. **Trip-only items.** Items added to a trip are marked `tripOnly` and show a "This trip" tag. They can be promoted to the template (one at a time, or all at once from the trip menu). Editing a trip never changes its template.
-3. **Who packs it.** Every item has `who`:
-   - `shared`: one check covers the household (tent, stove, first aid). Done when anyone checks it. Shown as a square checkbox. The row says who packed it.
-   - `each`: everyone packs their own (boots, headlamp). One circle per person with their initial. Done only when everyone has checked.
+2. **Items added on a trip.** Items added to a trip are marked `tripOnly` in data (for promote / Finish trip). That flag is **not** shown as a row tag — trip-only items only appear in the **Update template…** sheet. Promote via **Add to template** on one item, **Update template…**, or as part of **Finish trip**. Editing a trip never changes its template until you promote.
+3. **"New" from others.** A small **New** tag means another household member added the item since you last left this list. Stored via `items.createdAt` / `createdBy` and per-person `list_views.lastViewedAt`. Update `lastViewedAt` when you leave (not on enter), so tags stay for the whole visit. Don't mark your own additions. First visit (no last-viewed yet) shows no New tags. Home trip cards show **N new items** when that count is > 0.
+4. **Trip lifecycle.** Active trips live under **Packing now**. **Finish trip** (⋯ menu, or a dismissible prompt when the trip hits 100%) opens the update-template picker (“You added N items this trip. Save any to Template?”) then archives. Archived trips are read-only under a collapsed **Past trips (N)** on Home, with **Restore**. Stored as `lists.archivedAt` / column `archived_at`.
+5. **Who packs it.** Every item has `who`:
+   - `shared`: one check covers the household (tent, stove, first aid). Done when anyone checks it. Shown as a square checkbox.
+   - `each`: everyone packs their own (boots, headlamp). One circle per person. Done only when everyone has checked.
    - a person id (`dustin` / `brea`): only that person packs it. One circle.
-   The current user's circle is solid-outlined; the other person's is dashed.
-4. **Checks belong to a person, not an item.** Store checks as separate records `{ listId, itemId, personId }`. "Done" is computed from those, never stored.
-5. **Sections, not indentation.** Items live in ordered sections (Clothing, On the trail, ...). Sections collapse. Items and sections can be reordered.
-6. **"Packing as."** The app knows which person is using it. Until real logins exist (stage 3), it's a picker on first launch, remembered on the device, with a tap-to-switch circle in the header.
+   Circles: unchecked = outlined with the person's initial (current user's outline solid, the other person's dashed). Checked = filled circle in that person's color with a white check mark (no initial). Circles carry Shared / Each / whose-pack — do **not** put "Shared", "Each", or "Waiting on…" under the row title.
+   Row subtext is for exceptions only: **Packed by Name** when a Shared item is checked (who tapped it — stored as `checkedBy`), or when someone checks another person's circle / slot (`checkedBy` ≠ `personId`) — hidden in **Mine to pack**; and the **New** tag when someone else added the item since you last left. Keep full descriptive `aria-label`s on check controls for VoiceOver.
+6. **Checks belong to a person, not an item.** Store checks as separate records `{ listId, itemId, personId, checkedBy?, checkedAt }`. `personId` is whose pack slot; `checkedBy` is who tapped (needed when you pack for the other person). "Done" is computed from checks, never stored.
+7. **Sections, not indentation.** Items live in ordered sections (Clothing, On the trail, ...). Sections collapse. Reorder two ways:
+   - **Reorder mode** (list ⋯ → Reorder): drag handles on items and section headers; drag starts immediately from the handle; check circles are muted/disabled; **Done** exits. Move up/down in sheets remains a fallback.
+   - **Long-press shortcut** (any trip filter on Everything / Still to pack / Mine to pack): hold ~500ms on a row or section header to drag; if the finger moves more than ~8px during the hold, treat it as scroll (cancel drag). Clear lift (scale + shadow) when the drag starts. Disable iOS text selection / callout on rows. Hidden items in filtered views keep their place relative to the items you reorder.
+8. **"Packing as."** The app knows which person is using it (from login / profile). Header circle shows who; tap to sign out once signed in.
+9. **Checked items stay put** on Everything (crossed out and dimmed). In **Still to pack** / **Mine to pack**, a newly checked item fades out over about 1 second; unchecking during the fade cancels it and keeps the row.
 
 ## Data model
 
@@ -38,10 +44,11 @@ type PersonId = string;            // 'dustin' | 'brea' for now
 type Who = 'shared' | 'each' | PersonId;
 
 interface Person  { id: PersonId; name: string; initial: string; color: string }
-interface List    { id: string; name: string; kind: 'template' | 'trip'; templateId?: string; createdAt: number }
+interface List    { id: string; name: string; kind: 'template' | 'trip'; templateId?: string; createdAt: number; archivedAt?: number }
 interface Section { id: string; listId: string; name: string; position: number }
-interface Item    { id: string; listId: string; sectionId: string; text: string; who: Who; position: number; tripOnly?: boolean }
-interface Check   { listId: string; itemId: string; personId: PersonId; checkedAt: number }
+interface Item    { id: string; listId: string; sectionId: string; text: string; who: Who; position: number; tripOnly?: boolean; createdAt: number; createdBy?: PersonId }
+interface Check   { listId: string; itemId: string; personId: PersonId; checkedAt: number; checkedBy?: PersonId }
+interface ListView { listId: string; personId: PersonId; lastViewedAt: number }
 ```
 
 Rules:
@@ -49,15 +56,16 @@ Rules:
 - Item done: `shared` → any check exists; `each` → every person checked; person → that person checked.
 - Done for a person: `shared` → item done; otherwise → that person's check exists.
 - Starting a trip copies sections and items (new ids for the trip's rows, keep a pointer so promotion can find the template's matching section). Checks start empty.
+- Item is **New** for a person when `createdBy` is set, differs from that person, and `createdAt` is after their `lastViewedAt` for the list (no row → never New).
 
 All reads and writes go through one module, `src/store/`. Components never touch localStorage (or later Supabase) directly. This is what makes stage 3 a swap instead of a rewrite.
 
 ## Screens
 
-- **Home:** "Packing now" trip cards (name, "x of y items packed", a progress bar per person), a Templates list, "Start a pack" and "New template" buttons.
-- **List (trip):** sticky header (back, eyebrow "Trip · from <template>", name, person circle, ⋯ menu). Summary "N of M items fully packed" + per-person bars. Filter: Everything / Still to pack / Mine to pack. Small legend. Sections with "done/total" counts, collapse chevron, ⋯ to edit. "+ Add to <section>" row at the end of each section. "New section" at the bottom. When a filter empties out, show "All packed" / "You're packed".
+- **Home:** "Packing now" active trip cards (progress + **N new items** when others added since you last left); Templates; Start a pack / New template; collapsed **Past trips (N)** with Restore.
+- **List (trip):** sticky header (back, eyebrow "Trip · from <template>", name, person circle, ⋯ menu). Summary "N of M items fully packed" + per-person bars. Filter (order fixed): **Everything** (default) · **Still to pack** · **Mine to pack**; remember the last-used filter on this device (`localStorage`). No legend. In **Mine to pack**, Each items show only the signed-in person's circle; Shared keeps the square; hide **Packed by**. At 100%, dismissible **Finish trip** prompt. Sections with "done/total" counts, collapse chevron, ⋯ to edit. "+ Add to <section>" row at the end of each section. "New section" at the bottom. When a filter empties out, show "All packed" / "You're packed". Checked items remain in place on Everything; filtered views fade them out (~1s). Archived trips open read-only (Past trip eyebrow).
 - **List (template):** same layout, no checks or filters; the who-shapes are shown as static previews.
-- **Bottom sheets** for: add/edit item (text, who-packs-it picker with a one-line hint, section, move, delete, "Add to <template>" for trip-only items), edit/new section, start a pack (template picker + name defaulting to "Hiking · Sep 2026"), new template, list menu (rename, promote trip-only items, uncheck everything, delete).
+- **Bottom sheets** for: add/edit item (…), edit/new section, start a pack, new template, list menu (rename, **Reorder**, **Finish trip**, **Update template…**, uncheck everything, delete; archived: **Restore trip**, delete). Never show the phrase "trip-only" in the UI.
 - **Destructive actions** use a two-tap confirm in the button itself ("Tap again to delete"), never `window.confirm`.
 - Adding items keeps the sheet open with the input focused, for fast entry.
 
@@ -120,4 +128,6 @@ Do one step per request, then stop and report. Host the frontend on **Netlify** 
 
 ## Later ideas (don't build yet)
 
-Grocery-style ongoing lists (checked items sink or disappear), quantities, notes on items, trip history and archive, offline support, import from CSV/Sheets/Keep.
+Grocery-style ongoing lists (checked items sink or disappear), quantities, notes on items, offline support, import from CSV/Sheets/Keep.
+
+Pinning (for when we have ongoing lists like groceries).
