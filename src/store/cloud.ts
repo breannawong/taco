@@ -14,6 +14,43 @@ function throwIfError(error: { message: string } | null, label: string) {
   if (error) throw new Error(`${label}: ${error.message}`)
 }
 
+/** person_key → profile uuid (for writing for_people). */
+let keyToProfileId = new Map<string, string>()
+/** profile uuid → person_key (for reading who). */
+let profileIdToKey = new Map<string, string>()
+
+function setProfileMaps(rows: { id: string; person_key: string }[]): void {
+  keyToProfileId = new Map()
+  profileIdToKey = new Map()
+  for (const row of rows) {
+    keyToProfileId.set(row.person_key, row.id)
+    profileIdToKey.set(row.id, row.person_key)
+  }
+}
+
+/** App still uses who; DB stores shared + for_people. */
+function whoToColumns(who: Who): { shared: boolean; for_people: string[] } {
+  if (who === 'shared') return { shared: true, for_people: [] }
+  if (who === 'each') return { shared: false, for_people: [] }
+  const profileId = keyToProfileId.get(who)
+  return { shared: false, for_people: profileId ? [profileId] : [] }
+}
+
+function whoFromColumns(
+  shared: boolean,
+  forPeople: string[] | null | undefined,
+): Who {
+  if (shared) return 'shared'
+  const ids = forPeople ?? []
+  if (ids.length === 0) return 'each'
+  if (ids.length === 1) {
+    const key = profileIdToKey.get(ids[0]!)
+    if (key) return key
+  }
+  // Multi-person subsets aren't in the UI yet; treat as Each.
+  return 'each'
+}
+
 function listRow(householdId: string, list: List) {
   return {
     id: list.id,
@@ -38,13 +75,15 @@ function sectionRow(householdId: string, section: Section) {
 }
 
 function itemRow(householdId: string, item: Item) {
+  const { shared, for_people } = whoToColumns(item.who)
   return {
     id: item.id,
     household_id: householdId,
     list_id: item.listId,
     section_id: item.sectionId,
     text: item.text,
-    who: item.who,
+    shared,
+    for_people,
     position: item.position,
     trip_only: Boolean(item.tripOnly),
     created_at: new Date(item.createdAt).toISOString(),
@@ -63,14 +102,51 @@ function checkRow(householdId: string, check: Check) {
   }
 }
 
+/**
+ * Mark every household profile as a traveler on these trips.
+ * UI does not edit travelers yet — keeps solo/family model ready.
+ */
+export async function cloudSetTripTravelersAllMembers(
+  householdId: string,
+  tripIds: string[],
+): Promise<void> {
+  if (tripIds.length === 0) return
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('household_id', householdId)
+  throwIfError(error, 'load profiles for travelers')
+  const profileIds = (data ?? []).map((r) => r.id as string)
+  if (profileIds.length === 0) return
+
+  const rows = tripIds.flatMap((tripId) =>
+    profileIds.map((profileId) => ({
+      household_id: householdId,
+      trip_id: tripId,
+      profile_id: profileId,
+    })),
+  )
+  const { error: upsertError } = await supabase
+    .from('trip_travelers')
+    .upsert(rows, { onConflict: 'trip_id,profile_id' })
+  throwIfError(upsertError, 'upsert trip travelers')
+}
+
 /** Household members from profiles → store people. */
 export async function fetchHouseholdPeople(householdId: string): Promise<Person[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('person_key, display_name, initial, color')
+    .select('id, person_key, display_name, initial, color')
     .eq('household_id', householdId)
 
   throwIfError(error, 'load profiles')
+
+  setProfileMaps(
+    (data ?? []).map((row) => ({
+      id: row.id as string,
+      person_key: row.person_key as string,
+    })),
+  )
 
   const people = (data ?? []).map((row) => ({
     id: row.person_key as string,
@@ -127,7 +203,10 @@ export async function fetchHouseholdStore(householdId: string): Promise<StoreDat
     listId: row.list_id as string,
     sectionId: row.section_id as string,
     text: row.text as string,
-    who: row.who as Who,
+    who: whoFromColumns(
+      Boolean(row.shared),
+      row.for_people as string[] | null,
+    ),
     position: row.position as number,
     createdAt: row.created_at
       ? new Date(row.created_at as string).getTime()
@@ -162,6 +241,9 @@ export async function replaceHouseholdStore(
   householdId: string,
   data: StoreData,
 ): Promise<void> {
+  // Ensure person_key ↔ profile id maps (needed for for_people).
+  await fetchHouseholdPeople(householdId)
+
   const { error: delError } = await supabase
     .from('lists')
     .delete()
@@ -215,6 +297,9 @@ export async function replaceHouseholdStore(
     )
     throwIfError(error, 'insert list views')
   }
+
+  const tripIds = data.lists.filter((l) => l.kind === 'trip').map((l) => l.id)
+  await cloudSetTripTravelersAllMembers(householdId, tripIds)
 }
 
 export async function cloudUpsertListView(
@@ -236,6 +321,9 @@ export async function cloudUpsertListView(
 export async function cloudInsertList(householdId: string, list: List) {
   const { error } = await supabase.from('lists').insert(listRow(householdId, list))
   throwIfError(error, 'insert list')
+  if (list.kind === 'trip') {
+    await cloudSetTripTravelersAllMembers(householdId, [list.id])
+  }
 }
 
 export async function cloudUpdateList(
@@ -318,11 +406,13 @@ export async function cloudInsertItems(householdId: string, items: Item[]) {
 }
 
 export async function cloudUpdateItem(householdId: string, item: Item) {
+  const { shared, for_people } = whoToColumns(item.who)
   const { error } = await supabase
     .from('items')
     .update({
       text: item.text,
-      who: item.who,
+      shared,
+      for_people,
       section_id: item.sectionId,
       position: item.position,
       trip_only: Boolean(item.tripOnly),

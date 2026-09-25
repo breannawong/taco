@@ -131,3 +131,13 @@ Do one step per request, then stop and report. Host the frontend on **Netlify** 
 Grocery-style ongoing lists (checked items sink or disappear), quantities, notes on items, offline support, import from CSV/Sheets/Keep.
 
 Pinning (for when we have ongoing lists like groceries).
+
+### Family packing & solo trips (data ready; UI later)
+
+The database can already describe more than “Dustin and Brea always both go”:
+
+- **Profiles without a login.** A profile is a person we pack for. `user_id` links them to a sign-in when they have one; leave it empty for kids or guests who never open the app. Logged-in people still pack as their profile.
+- **Who is on this trip.** `trip_travelers` lists which profiles are going. Today every trip is seeded with the whole household (both of us). Later: pick travelers when starting a pack (solo weekend vs full family).
+- **Who packs an item.** Instead of a single `who` string, items store `shared` (one check for everyone) plus `for_people` (profile ids). An empty `for_people` means everyone on the trip. That covers today’s Shared / Each / Dustin’s / Brea’s, and later “only the kids,” “Mom and Dad,” etc., without another schema rewrite.
+
+Until the UI catches up, the app still shows Shared / Each / person circles and keeps writing through a small translator so nothing looks different.

@@ -61,7 +61,7 @@ async function loadProfile(user: User): Promise<void> {
   const { data, error } = await supabase
     .from('profiles')
     .select('id, household_id, person_key, display_name, initial, color')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
     .maybeSingle()
 
   if (error) {
