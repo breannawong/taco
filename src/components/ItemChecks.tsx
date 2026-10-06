@@ -1,17 +1,22 @@
 import { useState } from 'react'
 import { IconCheck } from './Icons'
 import type { Check, Item, Person, PersonId, Who } from '../store'
-import { togglePersonCheck, toggleSharedCheck } from '../store'
+import { isDone, togglePersonCheck, toggleSharedCheck } from '../store'
 
 type Props = {
   item: Item
   checks: Check[]
+  /** Travelers (or household on templates). */
   people: Person[]
   me: PersonId
   /** When false (template), shapes are static previews. */
   interactive: boolean
   /** Mine to pack: only show the signed-in person's circle on Each items. */
   mineOnly?: boolean
+  /**
+   * Solo trip: one uniform checkbox for every item; stored who is unchanged.
+   */
+  solo?: boolean
 }
 
 function whoDescription(who: Who, people: Person[]): string {
@@ -28,6 +33,7 @@ export function ItemChecks({
   me,
   interactive,
   mineOnly = false,
+  solo = false,
 }: Props) {
   const [pop, setPop] = useState(false)
 
@@ -40,6 +46,46 @@ export function ItemChecks({
   const bump = () => {
     setPop(true)
     window.setTimeout(() => setPop(false), 220)
+  }
+
+  // Solo trip: one square for every item (Shared / Each / person stored as-is).
+  if (solo && people.length === 1) {
+    const traveler = people[0]!
+    const on = interactive && isDone(item, checks, people)
+    const label = on ? 'packed' : 'not packed'
+    if (!interactive) {
+      return (
+        <span
+          className="box static"
+          aria-label={`${item.text}, preview`}
+        >
+          <i />
+        </span>
+      )
+    }
+    return (
+      <button
+        type="button"
+        className={`box ${on ? 'on' : ''} ${pop ? 'pop' : ''}`}
+        aria-pressed={on}
+        aria-label={`${item.text}, ${label}`}
+        onClick={() => {
+          if (item.who === 'shared') {
+            toggleSharedCheck(item.listId, item.id, me)
+          } else if (item.who === 'each' || item.who === traveler.id) {
+            togglePersonCheck(item.listId, item.id, traveler.id, me)
+          } else {
+            // Someone else's item — fill their slot (help-pack).
+            togglePersonCheck(item.listId, item.id, item.who, me)
+          }
+          bump()
+        }}
+      >
+        <i>
+          <IconCheck />
+        </i>
+      </button>
+    )
   }
 
   if (item.who === 'shared') {

@@ -7,6 +7,7 @@ import type {
   Person,
   Section,
   StoreData,
+  TripTraveler,
   Who,
 } from './types'
 
@@ -123,7 +124,6 @@ function checkRow(householdId: string, check: Check) {
 
 /**
  * Mark every household profile as a traveler on these trips.
- * UI does not edit travelers yet — keeps solo/family model ready.
  */
 export async function cloudSetTripTravelersAllMembers(
   householdId: string,
@@ -149,6 +149,35 @@ export async function cloudSetTripTravelersAllMembers(
     .from('trip_travelers')
     .upsert(rows, { onConflict: 'trip_id,profile_id' })
   throwIfError(upsertError, 'upsert trip travelers')
+}
+
+/** Replace travelers on one trip (person_keys → profile ids). */
+export async function cloudReplaceTripTravelers(
+  householdId: string,
+  tripId: string,
+  personKeys: string[],
+): Promise<void> {
+  const { error: delError } = await supabase
+    .from('trip_travelers')
+    .delete()
+    .eq('household_id', householdId)
+    .eq('trip_id', tripId)
+  throwIfError(delError, 'clear trip travelers')
+
+  if (personKeys.length === 0) return
+  if (keyToProfileId.size === 0) await fetchHouseholdPeople(householdId)
+
+  const rows = personKeys
+    .map((key) => keyToProfileId.get(key))
+    .filter((id): id is string => Boolean(id))
+    .map((profileId) => ({
+      household_id: householdId,
+      trip_id: tripId,
+      profile_id: profileId,
+    }))
+  if (rows.length === 0) return
+  const { error } = await supabase.from('trip_travelers').insert(rows)
+  throwIfError(error, 'insert trip travelers')
 }
 
 /** Household members from profiles → store people. */
@@ -182,19 +211,22 @@ export async function fetchHouseholdPeople(householdId: string): Promise<Person[
 export async function fetchHouseholdStore(householdId: string): Promise<StoreData> {
   const people = await fetchHouseholdPeople(householdId)
 
-  const [listsRes, sectionsRes, itemsRes, checksRes, viewsRes] = await Promise.all([
-    supabase.from('lists').select('*').eq('household_id', householdId),
-    supabase.from('sections').select('*').eq('household_id', householdId),
-    supabase.from('items').select('*').eq('household_id', householdId),
-    supabase.from('checks').select('*').eq('household_id', householdId),
-    supabase.from('list_views').select('*').eq('household_id', householdId),
-  ])
+  const [listsRes, sectionsRes, itemsRes, checksRes, viewsRes, travelersRes] =
+    await Promise.all([
+      supabase.from('lists').select('*').eq('household_id', householdId),
+      supabase.from('sections').select('*').eq('household_id', householdId),
+      supabase.from('items').select('*').eq('household_id', householdId),
+      supabase.from('checks').select('*').eq('household_id', householdId),
+      supabase.from('list_views').select('*').eq('household_id', householdId),
+      supabase.from('trip_travelers').select('*').eq('household_id', householdId),
+    ])
 
   throwIfError(listsRes.error, 'load lists')
   throwIfError(sectionsRes.error, 'load sections')
   throwIfError(itemsRes.error, 'load items')
   throwIfError(checksRes.error, 'load checks')
   throwIfError(viewsRes.error, 'load list views')
+  throwIfError(travelersRes.error, 'load trip travelers')
 
   const lists: List[] = (listsRes.data ?? []).map((row) => ({
     id: row.id as string,
@@ -249,7 +281,15 @@ export async function fetchHouseholdStore(householdId: string): Promise<StoreDat
     lastViewedAt: new Date(row.last_viewed_at as string).getTime(),
   }))
 
-  return { people, lists, sections, items, checks, listViews }
+  const tripTravelers: TripTraveler[] = (travelersRes.data ?? [])
+    .map((row) => {
+      const personId = profileIdToKey.get(row.profile_id as string)
+      if (!personId) return null
+      return { tripId: row.trip_id as string, personId }
+    })
+    .filter((t): t is TripTraveler => t != null)
+
+  return { people, lists, sections, items, checks, listViews, tripTravelers }
 }
 
 /** Wipe packing rows for a household and insert a full StoreData snapshot. */
@@ -315,7 +355,16 @@ export async function replaceHouseholdStore(
   }
 
   const tripIds = data.lists.filter((l) => l.kind === 'trip').map((l) => l.id)
-  await cloudSetTripTravelersAllMembers(householdId, tripIds)
+  if (data.tripTravelers.length > 0) {
+    for (const tripId of tripIds) {
+      const keys = data.tripTravelers
+        .filter((t) => t.tripId === tripId)
+        .map((t) => t.personId)
+      await cloudReplaceTripTravelers(householdId, tripId, keys)
+    }
+  } else {
+    await cloudSetTripTravelersAllMembers(householdId, tripIds)
+  }
 }
 
 export async function cloudUpsertListView(
@@ -334,10 +383,14 @@ export async function cloudUpsertListView(
   throwIfError(error, 'upsert list view')
 }
 
-export async function cloudInsertList(householdId: string, list: List) {
+export async function cloudInsertList(
+  householdId: string,
+  list: List,
+  opts?: { skipDefaultTravelers?: boolean },
+) {
   const { error } = await supabase.from('lists').insert(listRow(householdId, list))
   throwIfError(error, 'insert list')
-  if (list.kind === 'trip') {
+  if (list.kind === 'trip' && !opts?.skipDefaultTravelers) {
     await cloudSetTripTravelersAllMembers(householdId, [list.id])
   }
 }

@@ -4,12 +4,14 @@ import {
   clearChecks,
   deleteList,
   renameList,
+  resolveTemplateIdForTripSection,
   restoreTrip,
 } from '../store'
 import { useStore } from '../store/useStore'
 import { goHome } from '../store/nav'
 import { useSheet } from './SheetProvider'
 import { StartPackSheet } from './StartPackSheet'
+import { TravelersSheet } from './TravelersSheet'
 import { UpdateTemplateSheet } from './UpdateTemplateSheet'
 import { toast } from '../toast'
 
@@ -28,18 +30,27 @@ export function ListMenuSheet({ listId, onStartReorder }: Props) {
 
   const trip = list.kind === 'trip'
   const archived = Boolean(list.archivedAt)
-  const template =
-    trip && list.templateId
-      ? data.lists.find((l) => l.id === list.templateId)
-      : undefined
   const addedOnTrip = trip
     ? data.items.filter((i) => i.listId === listId && i.tripOnly)
     : []
+  const canUpdateTemplates =
+    trip &&
+    !archived &&
+    addedOnTrip.some((item) => {
+      const sec = data.sections.find((s) => s.id === item.sectionId)
+      return Boolean(
+        resolveTemplateIdForTripSection(sec, data.sections, list.templateId),
+      )
+    })
 
-  const saveName = () => {
+  const saveName = async () => {
     const trimmed = name.trim()
-    if (trimmed) renameList(listId, trimmed)
-    closeSheet()
+    if (!trimmed) {
+      closeSheet()
+      return
+    }
+    const ok = await renameList(listId, trimmed)
+    if (ok) closeSheet()
   }
 
   return (
@@ -49,7 +60,7 @@ export function ListMenuSheet({ listId, onStartReorder }: Props) {
         autoComplete="off"
         onSubmit={(e) => {
           e.preventDefault()
-          saveName()
+          void saveName()
         }}
       >
         <div className="field">
@@ -63,15 +74,20 @@ export function ListMenuSheet({ listId, onStartReorder }: Props) {
         </div>
       </form>
       <div className="menu-list">
-        <button type="button" className="btn btn-primary" onClick={saveName}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => void saveName()}
+        >
           Save name
         </button>
         {archived && trip ? (
           <button
             type="button"
             className="btn btn-ghost"
-            onClick={() => {
-              restoreTrip(listId)
+            onClick={async () => {
+              const ok = await restoreTrip(listId)
+              if (!ok) return
               closeSheet()
               toast(`Restored ${list.name}`)
             }}
@@ -104,6 +120,15 @@ export function ListMenuSheet({ listId, onStartReorder }: Props) {
           <button
             type="button"
             className="btn btn-ghost"
+            onClick={() => openSheet(<TravelersSheet listId={listId} />)}
+          >
+            Who’s going…
+          </button>
+        ) : null}
+        {trip && !archived ? (
+          <button
+            type="button"
+            className="btn btn-ghost"
             onClick={() =>
               openSheet(<UpdateTemplateSheet listId={listId} mode="finish" />)
             }
@@ -111,7 +136,7 @@ export function ListMenuSheet({ listId, onStartReorder }: Props) {
             Finish trip
           </button>
         ) : null}
-        {trip && !archived && template && addedOnTrip.length > 0 ? (
+        {trip && !archived && canUpdateTemplates ? (
           <button
             type="button"
             className="btn btn-ghost"
@@ -124,8 +149,9 @@ export function ListMenuSheet({ listId, onStartReorder }: Props) {
           <ConfirmButton
             className="btn btn-ghost"
             confirmLabel="Tap again to uncheck all"
-            onConfirm={() => {
-              clearChecks(listId)
+            onConfirm={async () => {
+              const ok = await clearChecks(listId)
+              if (!ok) return
               closeSheet()
               toast('Unchecked everything')
             }}
@@ -136,9 +162,10 @@ export function ListMenuSheet({ listId, onStartReorder }: Props) {
         <ConfirmButton
           className="btn btn-danger"
           confirmLabel={`Tap again to delete ${trip ? 'this trip' : 'this template'}`}
-          onConfirm={() => {
+          onConfirm={async () => {
             const label = list.name
-            deleteList(listId)
+            const ok = await deleteList(listId)
+            if (!ok) return
             closeSheet()
             goHome()
             toast(`Deleted ${label}`)

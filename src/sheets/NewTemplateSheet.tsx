@@ -13,9 +13,9 @@ export function NewTemplateSheet() {
     return () => window.clearTimeout(t)
   }, [])
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    const id = createTemplate(name)
+    const id = await createTemplate(name)
     if (!id) {
       inputRef.current?.focus()
       return

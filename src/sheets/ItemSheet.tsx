@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import { ConfirmButton } from '../components/ConfirmButton'
 import {
   WHO_OPTIONS,
@@ -7,9 +7,12 @@ import {
   getLastWho,
   getStore,
   moveItem,
+  peopleForList,
   promoteItems,
+  resolveTemplateIdForTripSection,
   setLastWho,
   updateItem,
+  whoOptionsForTravelers,
   type Who,
 } from '../store'
 import { useStore } from '../store/useStore'
@@ -36,16 +39,40 @@ export function ItemSheet({ listId, itemId, sectionId }: Props) {
   const addSectionId = sectionId ?? item?.sectionId ?? sections[0]?.id
   const section = sections.find((s) => s.id === addSectionId)
   const trip = list?.kind === 'trip'
-  const template =
-    trip && list?.templateId
-      ? data.lists.find((l) => l.id === list.templateId)
-      : undefined
+  const travelers = trip ? peopleForList(listId, data) : data.people
+  const solo = trip && travelers.length === 1
+  const itemSection = item
+    ? data.sections.find((s) => s.id === item.sectionId)
+    : undefined
+  const templateIdForItem =
+    trip && item
+      ? resolveTemplateIdForTripSection(
+          itemSection,
+          data.sections,
+          list?.templateId,
+        )
+      : null
+  const template = templateIdForItem
+    ? data.lists.find((l) => l.id === templateIdForItem)
+    : undefined
+
+  const whoChoices = useMemo(() => {
+    if (!trip) return WHO_OPTIONS
+    return whoOptionsForTravelers(travelers)
+  }, [trip, travelers])
+
+  const initialWho = (): Who => {
+    if (solo) return 'each'
+    const last = item?.who ?? getLastWho()
+    if (whoChoices.some((w) => w.id === last)) return last
+    return 'shared'
+  }
 
   const [text, setText] = useState(item?.text ?? '')
-  const [who, setWho] = useState<Who>(item?.who ?? getLastWho())
+  const [who, setWho] = useState<Who>(initialWho)
   const [secId, setSecId] = useState(item?.sectionId ?? addSectionId ?? '')
   const inputRef = useRef<HTMLInputElement>(null)
-  const whoHint = WHO_OPTIONS.find((w) => w.id === who)?.hint ?? ''
+  const whoHint = whoChoices.find((w) => w.id === who)?.hint ?? ''
   const formId = useId()
 
   useEffect(() => {
@@ -58,19 +85,28 @@ export function ItemSheet({ listId, itemId, sectionId }: Props) {
     return null
   }
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
     const trimmed = text.trim()
     if (!trimmed) {
       inputRef.current?.focus()
       return
     }
-    setLastWho(who)
     if (item) {
-      updateItem(item.id, { text: trimmed, who, sectionId: secId })
-      closeSheet()
+      // Solo: keep stored who as-is (don't rewrite Shared/Each).
+      let ok: boolean
+      if (solo) {
+        ok = await updateItem(item.id, { text: trimmed, sectionId: secId })
+      } else {
+        setLastWho(who)
+        ok = await updateItem(item.id, { text: trimmed, who, sectionId: secId })
+      }
+      if (ok) closeSheet()
     } else {
-      addItem(listId, addSectionId, trimmed, who)
+      const saveWho: Who = solo ? 'each' : who
+      if (!solo) setLastWho(saveWho)
+      const added = await addItem(listId, addSectionId, trimmed, saveWho)
+      if (!added) return
       setText('')
       toast(`Added ${trimmed}`)
       window.setTimeout(() => inputRef.current?.focus(), 0)
@@ -94,39 +130,46 @@ export function ItemSheet({ listId, itemId, sectionId }: Props) {
           />
         </div>
 
-        <fieldset className="field">
-          <legend>Who packs it?</legend>
-          <div className="who-seg">
-            {WHO_OPTIONS.map((w) => (
-              <label key={w.id}>
-                <input
-                  type="radio"
-                  name="who"
-                  value={w.id}
-                  checked={who === w.id}
-                  onChange={() => setWho(w.id)}
-                />
-                <span className="who-ico">
-                  {w.id === 'shared' ? (
-                    <i className="lg-box" />
-                  ) : w.id === 'each' ? (
-                    <>
-                      <i className="lg-dot" style={{ borderColor: 'var(--dustin)' }} />
-                      <i className="lg-dot" style={{ borderColor: 'var(--brea)' }} />
-                    </>
-                  ) : (
-                    <i
-                      className="lg-dot"
-                      style={{ borderColor: `var(--${w.id})` }}
-                    />
-                  )}
-                </span>
-                {w.label}
-              </label>
-            ))}
-          </div>
-          <p className="hint">{whoHint}</p>
-        </fieldset>
+        {!solo ? (
+          <fieldset className="field">
+            <legend>Who packs it?</legend>
+            <div className="who-seg">
+              {whoChoices.map((w) => (
+                <label key={w.id}>
+                  <input
+                    type="radio"
+                    name="who"
+                    value={w.id}
+                    checked={who === w.id}
+                    onChange={() => setWho(w.id)}
+                  />
+                  <span className="who-ico">
+                    {w.id === 'shared' ? (
+                      <i className="lg-box" />
+                    ) : w.id === 'each' ? (
+                      <>
+                        {travelers.slice(0, 2).map((p) => (
+                          <i
+                            key={p.id}
+                            className="lg-dot"
+                            style={{ borderColor: `var(--${p.id})` }}
+                          />
+                        ))}
+                      </>
+                    ) : (
+                      <i
+                        className="lg-dot"
+                        style={{ borderColor: `var(--${w.id})` }}
+                      />
+                    )}
+                  </span>
+                  {w.label}
+                </label>
+              ))}
+            </div>
+            <p className="hint">{whoHint}</p>
+          </fieldset>
+        ) : null}
 
         {item ? (
           <>
@@ -149,8 +192,8 @@ export function ItemSheet({ listId, itemId, sectionId }: Props) {
               <button
                 type="button"
                 className="btn btn-ghost"
-                onClick={() => {
-                  if (!moveItem(item.id, -1)) toast('Already at the top')
+                onClick={async () => {
+                  if (!(await moveItem(item.id, -1))) toast('Already at the top')
                 }}
               >
                 Move up
@@ -158,8 +201,8 @@ export function ItemSheet({ listId, itemId, sectionId }: Props) {
               <button
                 type="button"
                 className="btn btn-ghost"
-                onClick={() => {
-                  if (!moveItem(item.id, 1)) toast('Already at the bottom')
+                onClick={async () => {
+                  if (!(await moveItem(item.id, 1))) toast('Already at the bottom')
                 }}
               >
                 Move down
@@ -168,11 +211,14 @@ export function ItemSheet({ listId, itemId, sectionId }: Props) {
                 <button
                   type="button"
                   className="btn btn-ghost btn-stack"
-                  onClick={() => {
-                    const name = promoteItems(listId, [item.id])
-                    if (name) toast(`Added 1 item to ${name}`)
-                    else toast('The template for this trip was deleted')
-                    closeSheet()
+                  onClick={async () => {
+                    const name = await promoteItems(listId, [item.id])
+                    if (name) {
+                      toast(`Added 1 item to ${name}`)
+                      closeSheet()
+                    } else {
+                      toast('Couldn’t add to template')
+                    }
                   }}
                 >
                   <strong>Add to template</strong>
@@ -194,9 +240,10 @@ export function ItemSheet({ listId, itemId, sectionId }: Props) {
             <ConfirmButton
               className="btn btn-danger"
               confirmLabel="Tap again to delete"
-              onConfirm={() => {
+              onConfirm={async () => {
                 const label = getStore().items.find((i) => i.id === item.id)?.text
-                deleteItem(item.id)
+                const ok = await deleteItem(item.id)
+                if (!ok) return
                 closeSheet()
                 toast(`Deleted ${label ?? 'item'}`)
               }}

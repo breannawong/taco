@@ -1,3 +1,4 @@
+import { toast } from '../toast'
 import {
   cloudClearChecksForList,
   cloudDeleteCheck,
@@ -8,6 +9,7 @@ import {
   cloudInsertItems,
   cloudInsertList,
   cloudInsertSections,
+  cloudReplaceTripTravelers,
   cloudUpdateItem,
   cloudUpdateItemPositions,
   cloudUpdateList,
@@ -21,7 +23,14 @@ import {
 import { startChecksRealtime, stopChecksRealtime } from './realtime'
 import { createSeedData, PEOPLE } from './seed'
 import { getMe } from './session'
-import type { Check, Item, Person, PersonId, StoreData, Who } from './types'
+import type {
+  Check,
+  Item,
+  Person,
+  PersonId,
+  StoreData,
+  Who,
+} from './types'
 import { newId, nextPosition, renumberPositions } from './who'
 
 export type { StoreData } from './types'
@@ -34,11 +43,26 @@ export type {
   PersonId,
   PersonProgress,
   Section,
+  TripTraveler,
   Who,
 } from './types'
-export { doneFor, isDone, owes, progress, isItemNewFor, countNewItems } from './helpers'
+export {
+  doneFor,
+  isDone,
+  owes,
+  progress,
+  isItemNewFor,
+  countNewItems,
+} from './helpers'
+export {
+  itemMemoryMap,
+  memoryForText,
+  suggestItemMemories,
+  whoForListMemory,
+  type ItemMemory,
+} from './itemMemory'
 export { PEOPLE } from './seed'
-export { WHO_OPTIONS, getLastWho, setLastWho, newId } from './who'
+export { WHO_OPTIONS, whoOptionsForTravelers, getLastWho, setLastWho, newId } from './who'
 
 /** Label for the who-packs-it meta line. */
 export function whoLabel(item: Item, people: Person[]): string {
@@ -68,6 +92,7 @@ function emptyStore(people: Person[] = PEOPLE): StoreData {
     items: [],
     checks: [],
     listViews: [],
+    tripTravelers: [],
   }
 }
 
@@ -99,17 +124,36 @@ function applyLocal(next: StoreData) {
   emit()
 }
 
-function setState(next: StoreData, cloud?: CloudWrite) {
+const SAVE_FAIL_MSG =
+  "Couldn't save. Check your connection and try again."
+
+/**
+ * Write to Supabase first (when cloud is provided), then update local state.
+ * On failure: toast, leave local state unchanged, return false.
+ */
+async function commit(
+  next: StoreData,
+  cloud?: CloudWrite,
+): Promise<boolean> {
+  if (cloud) {
+    const hh = status.householdId
+    if (!hh) {
+      toast(SAVE_FAIL_MSG)
+      return false
+    }
+    try {
+      await cloud(hh)
+    } catch (err: unknown) {
+      const detail = err instanceof Error ? err.message : String(err)
+      console.error('Taco cloud sync failed:', detail)
+      toast(SAVE_FAIL_MSG)
+      return false
+    }
+  }
   state = next
   persistLocal(state)
   emit()
-  const hh = status.householdId
-  if (hh && cloud) {
-    void cloud(hh).catch((err: unknown) => {
-      const message = err instanceof Error ? err.message : 'Sync failed'
-      console.error('Taco cloud sync failed:', message)
-    })
-  }
+  return true
 }
 
 function applyRemoteCheckInsert(check: Check) {
@@ -201,25 +245,25 @@ export function disconnectHousehold(): void {
 }
 
 /** Wipe household packing data and reload the Hiking + Utah sample. */
-export function resetSampleData(): void {
+export async function resetSampleData(): Promise<void> {
   const seed = createSeedData()
   seed.people =
     state.people.length > 0 ? state.people.map((p) => ({ ...p })) : seed.people
-  setState(seed, (hh) => replaceHouseholdStore(hh, seed))
+  await commit(seed, (hh) => replaceHouseholdStore(hh, seed))
 }
 
 /** Toggle one person's check on an item (each / person who). */
-export function togglePersonCheck(
+export async function togglePersonCheck(
   listId: string,
   itemId: string,
   personId: PersonId,
   checkedBy: PersonId,
-): void {
+): Promise<void> {
   const existing = state.checks.some(
     (c) => c.listId === listId && c.itemId === itemId && c.personId === personId,
   )
   if (existing) {
-    setState(
+    await commit(
       {
         ...state,
         checks: state.checks.filter(
@@ -237,7 +281,7 @@ export function togglePersonCheck(
       checkedBy,
       checkedAt: Date.now(),
     }
-    setState(
+    await commit(
       { ...state, checks: [...state.checks, check] },
       (hh) => cloudUpsertCheck(hh, check),
     )
@@ -248,16 +292,16 @@ export function togglePersonCheck(
  * Shared item: if anyone checked it, clear all checks;
  * otherwise check it as the current person.
  */
-export function toggleSharedCheck(
+export async function toggleSharedCheck(
   listId: string,
   itemId: string,
   personId: PersonId,
-): void {
+): Promise<void> {
   const anyChecked = state.checks.some(
     (c) => c.listId === listId && c.itemId === itemId,
   )
   if (anyChecked) {
-    setState(
+    await commit(
       {
         ...state,
         checks: state.checks.filter(
@@ -274,19 +318,19 @@ export function toggleSharedCheck(
       checkedBy: personId,
       checkedAt: Date.now(),
     }
-    setState(
+    await commit(
       { ...state, checks: [...state.checks, check] },
       (hh) => cloudUpsertCheck(hh, check),
     )
   }
 }
 
-export function addItem(
+export async function addItem(
   listId: string,
   sectionId: string,
   text: string,
   who: Who,
-): Item {
+): Promise<Item | null> {
   const list = state.lists.find((l) => l.id === listId)
   const siblings = state.items.filter(
     (i) => i.listId === listId && i.sectionId === sectionId,
@@ -303,18 +347,18 @@ export function addItem(
     ...(me ? { createdBy: me } : {}),
     ...(list?.kind === 'trip' ? { tripOnly: true } : {}),
   }
-  setState({ ...state, items: [...state.items, item] }, (hh) =>
+  const ok = await commit({ ...state, items: [...state.items, item] }, (hh) =>
     cloudInsertItems(hh, [item]),
   )
-  return item
+  return ok ? item : null
 }
 
-export function updateItem(
+export async function updateItem(
   itemId: string,
   patch: { text?: string; who?: Who; sectionId?: string },
-): void {
+): Promise<boolean> {
   const item = state.items.find((i) => i.id === itemId)
-  if (!item) return
+  if (!item) return false
 
   let next = { ...item, ...patch }
   if (patch.sectionId && patch.sectionId !== item.sectionId) {
@@ -327,7 +371,7 @@ export function updateItem(
     next = { ...next, position: nextPosition(siblings) }
   }
 
-  setState(
+  return await commit(
     {
       ...state,
       items: state.items.map((i) => (i.id === itemId ? next : i)),
@@ -336,10 +380,10 @@ export function updateItem(
   )
 }
 
-export function deleteItem(itemId: string): void {
+export async function deleteItem(itemId: string): Promise<boolean> {
   const item = state.items.find((i) => i.id === itemId)
-  if (!item) return
-  setState(
+  if (!item) return false
+  return await commit(
     {
       ...state,
       items: state.items.filter((i) => i.id !== itemId),
@@ -350,7 +394,7 @@ export function deleteItem(itemId: string): void {
 }
 
 /** Move item within its section. dir: -1 up, +1 down. Returns false if blocked. */
-export function moveItem(itemId: string, dir: -1 | 1): boolean {
+export async function moveItem(itemId: string, dir: -1 | 1): Promise<boolean> {
   const item = state.items.find((i) => i.id === itemId)
   if (!item) return false
   const sibs = state.items
@@ -366,16 +410,15 @@ export function moveItem(itemId: string, dir: -1 | 1): boolean {
   const nextItems = state.items.map((it) =>
     byId.has(it.id) ? { ...it, position: byId.get(it.id)! } : it,
   )
-  setState({ ...state, items: nextItems }, (hh) =>
+  return await commit({ ...state, items: nextItems }, (hh) =>
     cloudUpdateItemPositions(
       hh,
       nextItems.filter((it) => byId.has(it.id)),
     ),
   )
-  return true
 }
 
-export function addSection(listId: string, name: string): void {
+export async function addSection(listId: string, name: string): Promise<string | null> {
   const siblings = state.sections.filter((s) => s.listId === listId)
   const section = {
     id: newId(),
@@ -383,16 +426,17 @@ export function addSection(listId: string, name: string): void {
     name,
     position: nextPosition(siblings),
   }
-  setState({ ...state, sections: [...state.sections, section] }, (hh) =>
+  const ok = await commit({ ...state, sections: [...state.sections, section] }, (hh) =>
     cloudInsertSections(hh, [section]),
   )
+  return ok ? section.id : null
 }
 
-export function updateSection(sectionId: string, name: string): void {
+export async function updateSection(sectionId: string, name: string): Promise<boolean> {
   const section = state.sections.find((s) => s.id === sectionId)
-  if (!section) return
+  if (!section) return false
   const next = { ...section, name }
-  setState(
+  return await commit(
     {
       ...state,
       sections: state.sections.map((s) => (s.id === sectionId ? next : s)),
@@ -401,13 +445,13 @@ export function updateSection(sectionId: string, name: string): void {
   )
 }
 
-export function deleteSection(sectionId: string): void {
+export async function deleteSection(sectionId: string): Promise<boolean> {
   const section = state.sections.find((s) => s.id === sectionId)
-  if (!section) return
+  if (!section) return false
   const itemIds = new Set(
     state.items.filter((i) => i.sectionId === sectionId).map((i) => i.id),
   )
-  setState(
+  return await commit(
     {
       ...state,
       sections: state.sections.filter((s) => s.id !== sectionId),
@@ -418,7 +462,7 @@ export function deleteSection(sectionId: string): void {
   )
 }
 
-export function moveSection(sectionId: string, dir: -1 | 1): boolean {
+export async function moveSection(sectionId: string, dir: -1 | 1): Promise<boolean> {
   const section = state.sections.find((s) => s.id === sectionId)
   if (!section) return false
   const sibs = state.sections
@@ -434,17 +478,16 @@ export function moveSection(sectionId: string, dir: -1 | 1): boolean {
   const nextSections = state.sections.map((s) =>
     byId.has(s.id) ? { ...s, position: byId.get(s.id)! } : s,
   )
-  setState({ ...state, sections: nextSections }, (hh) =>
+  return await commit({ ...state, sections: nextSections }, (hh) =>
     cloudUpdateSectionPositions(
       hh,
       nextSections.filter((s) => byId.has(s.id)),
     ),
   )
-  return true
 }
 
-export function renameList(listId: string, name: string): void {
-  setState(
+export async function renameList(listId: string, name: string): Promise<boolean> {
+  return await commit(
     {
       ...state,
       lists: state.lists.map((l) => (l.id === listId ? { ...l, name } : l)),
@@ -454,11 +497,11 @@ export function renameList(listId: string, name: string): void {
 }
 
 /** Mark a trip as finished (Past trips). */
-export function archiveTrip(listId: string): void {
+export async function archiveTrip(listId: string): Promise<boolean> {
   const list = state.lists.find((l) => l.id === listId)
-  if (!list || list.kind !== 'trip') return
+  if (!list || list.kind !== 'trip') return false
   const archivedAt = Date.now()
-  setState(
+  return await commit(
     {
       ...state,
       lists: state.lists.map((l) =>
@@ -473,10 +516,10 @@ export function archiveTrip(listId: string): void {
 }
 
 /** Bring an archived trip back to Packing now. */
-export function restoreTrip(listId: string): void {
+export async function restoreTrip(listId: string): Promise<boolean> {
   const list = state.lists.find((l) => l.id === listId)
-  if (!list || list.kind !== 'trip') return
-  setState(
+  if (!list || list.kind !== 'trip') return false
+  return await commit(
     {
       ...state,
       lists: state.lists.map((l) => {
@@ -494,8 +537,8 @@ export function restoreTrip(listId: string): void {
   )
 }
 
-export function deleteList(listId: string): void {
-  setState(
+export async function deleteList(listId: string): Promise<boolean> {
+  return await commit(
     {
       ...state,
       lists: state.lists.filter((l) => l.id !== listId),
@@ -503,13 +546,14 @@ export function deleteList(listId: string): void {
       items: state.items.filter((i) => i.listId !== listId),
       checks: state.checks.filter((c) => c.listId !== listId),
       listViews: state.listViews.filter((v) => v.listId !== listId),
+      tripTravelers: state.tripTravelers.filter((t) => t.tripId !== listId),
     },
     (hh) => cloudDeleteList(hh, listId),
   )
 }
 
 /** Record that this person left the list (drives "New" for next visit). */
-export function markListViewed(listId: string, personId: PersonId): void {
+export async function markListViewed(listId: string, personId: PersonId): Promise<void> {
   const lastViewedAt = Date.now()
   const row = { listId, personId, lastViewedAt }
   const listViews = [
@@ -518,7 +562,7 @@ export function markListViewed(listId: string, personId: PersonId): void {
     ),
     row,
   ]
-  setState({ ...state, listViews }, (hh) => cloudUpsertListView(hh, row))
+  await commit({ ...state, listViews }, (hh) => cloudUpsertListView(hh, row))
 }
 
 export function getLastViewedAt(
@@ -532,8 +576,8 @@ export function getLastViewedAt(
   )
 }
 
-export function clearChecks(listId: string): void {
-  setState(
+export async function clearChecks(listId: string): Promise<boolean> {
+  return await commit(
     {
       ...state,
       checks: state.checks.filter((c) => c.listId !== listId),
@@ -542,15 +586,50 @@ export function clearChecks(listId: string): void {
   )
 }
 
+/** Replace who’s going on a trip. At least one traveler required. */
+export async function setTripTravelers(
+  tripId: string,
+  travelerIds: PersonId[],
+): Promise<boolean> {
+  const list = state.lists.find((l) => l.id === tripId)
+  if (!list || list.kind !== 'trip') return false
+  const unique = [...new Set(travelerIds)].filter((id) =>
+    state.people.some((p) => p.id === id),
+  )
+  if (unique.length === 0) return false
+
+  const tripTravelers = [
+    ...state.tripTravelers.filter((t) => t.tripId !== tripId),
+    ...unique.map((personId) => ({ tripId, personId })),
+  ]
+  // Drop checks for people no longer on the trip (their pack slots are gone).
+  const keep = new Set(unique)
+  const checks = state.checks.filter(
+    (c) => c.listId !== tripId || keep.has(c.personId),
+  )
+
+  return await commit({ ...state, tripTravelers, checks }, async (hh) => {
+    await cloudReplaceTripTravelers(hh, tripId, unique)
+    // Checks for removed people: delete via clearing then… cloud has no
+    // bulk-by-person helper; remove orphaned checks one-by-one.
+    const removed = state.checks.filter(
+      (c) => c.listId === tripId && !keep.has(c.personId),
+    )
+    for (const c of removed) {
+      await cloudDeleteCheck(hh, c.itemId, c.personId)
+    }
+  })
+}
+
 /** Persist a new section order for a list (ids top → bottom). */
-export function setSectionOrder(listId: string, orderedIds: string[]): void {
+export async function setSectionOrder(listId: string, orderedIds: string[]): Promise<void> {
   const byId = new Map(orderedIds.map((id, i) => [id, (i + 1) * 1000]))
   const nextSections = state.sections.map((s) =>
     s.listId === listId && byId.has(s.id)
       ? { ...s, position: byId.get(s.id)! }
       : s,
   )
-  setState({ ...state, sections: nextSections }, (hh) =>
+  await commit({ ...state, sections: nextSections }, (hh) =>
     cloudUpdateSectionPositions(
       hh,
       nextSections.filter((s) => s.listId === listId && byId.has(s.id)),
@@ -563,10 +642,10 @@ export function setSectionOrder(listId: string, orderedIds: string[]): void {
  * `orderedIdsInTarget` is the full item-id order for the destination section
  * after the move (including the active item).
  */
-export function setItemOrderInSection(
+export async function setItemOrderInSection(
   sectionId: string,
   orderedIds: string[],
-): void {
+): Promise<void> {
   const byId = new Map(orderedIds.map((id, i) => [id, (i + 1) * 1000]))
   const nextItems = state.items.map((item) => {
     if (!byId.has(item.id)) return item
@@ -576,7 +655,7 @@ export function setItemOrderInSection(
       position: byId.get(item.id)!,
     }
   })
-  setState({ ...state, items: nextItems }, (hh) =>
+  await commit({ ...state, items: nextItems }, (hh) =>
     cloudUpdateItemPositions(
       hh,
       nextItems.filter((item) => byId.has(item.id)),
@@ -587,16 +666,16 @@ export function setItemOrderInSection(
 /**
  * After dragging an item out of a section, renumber the remaining items there.
  */
-export function setItemOrderOnly(
+export async function setItemOrderOnly(
   sectionId: string,
   orderedIds: string[],
-): void {
+): Promise<void> {
   const byId = new Map(orderedIds.map((id, i) => [id, (i + 1) * 1000]))
   const nextItems = state.items.map((item) => {
     if (item.sectionId !== sectionId || !byId.has(item.id)) return item
     return { ...item, position: byId.get(item.id)! }
   })
-  setState({ ...state, items: nextItems }, (hh) =>
+  await commit({ ...state, items: nextItems }, (hh) =>
     cloudUpdateItemPositions(
       hh,
       nextItems.filter(
@@ -607,15 +686,13 @@ export function setItemOrderOnly(
 }
 
 /**
- * Copy trip-only items onto the template (matching section via sourceSectionId),
- * then clear tripOnly on the trip items.
+ * Copy trip-only items onto the right template for each item's section
+ * (via sourceSectionId → template), then clear tripOnly on the trip items.
+ * Returns a short label of templates updated, or null if nothing could be saved.
  */
-export function promoteItems(listId: string, itemIds: string[]): string | null {
+export async function promoteItems(listId: string, itemIds: string[]): Promise<string | null> {
   const list = state.lists.find((l) => l.id === listId)
-  if (!list?.templateId) return null
-  const templateId = list.templateId
-  const template = state.lists.find((l) => l.id === templateId)
-  if (!template) return null
+  if (!list || list.kind !== 'trip') return null
 
   let sections = [...state.sections]
   let items = [...state.items]
@@ -623,15 +700,28 @@ export function promoteItems(listId: string, itemIds: string[]): string | null {
   const newItems: typeof items = []
   const updatedTripItems: typeof items = []
   const updatedTripSections: typeof sections = []
+  const templateNames = new Set<string>()
 
   for (const itemId of itemIds) {
     const tripItem = items.find((i) => i.id === itemId && i.listId === listId)
     if (!tripItem) continue
 
     const tripSection = sections.find((s) => s.id === tripItem.sectionId)
+    const templateId = resolveTemplateIdForTripSection(
+      tripSection,
+      sections,
+      list.templateId,
+    )
+    if (!templateId) continue
+    const template = state.lists.find(
+      (l) => l.id === templateId && l.kind === 'template',
+    )
+    if (!template) continue
+    templateNames.add(template.name)
+
     let templateSectionId = tripSection?.sourceSectionId
     let templateSection = templateSectionId
-      ? sections.find((s) => s.id === templateSectionId)
+      ? sections.find((s) => s.id === templateSectionId && s.listId === templateId)
       : undefined
 
     if (!templateSection && tripSection) {
@@ -687,20 +777,76 @@ export function promoteItems(listId: string, itemIds: string[]): string | null {
     if (cleared) updatedTripItems.push(cleared)
   }
 
-  setState({ ...state, sections, items }, async (hh) => {
+  if (newItems.length === 0 && updatedTripItems.length === 0) return null
+
+  const ok = await commit({ ...state, sections, items }, async (hh) => {
     await cloudInsertSections(hh, newSections)
     await cloudInsertItems(hh, newItems)
     for (const s of updatedTripSections) await cloudUpdateSection(hh, s)
     for (const i of updatedTripItems) await cloudUpdateItem(hh, i)
   })
-  return template.name
+  return ok ? [...templateNames].join(', ') : null
+}
+
+/** Template list id this trip section should save back to. */
+export function resolveTemplateIdForTripSection(
+  tripSection: { sourceSectionId?: string; name: string } | undefined,
+  sections = state.sections,
+  fallbackTemplateId?: string,
+): string | null {
+  if (tripSection?.sourceSectionId) {
+    const src = sections.find((s) => s.id === tripSection.sourceSectionId)
+    if (src) {
+      const tpl = state.lists.find(
+        (l) => l.id === src.listId && l.kind === 'template',
+      )
+      if (tpl) return tpl.id
+    }
+  }
+  if (fallbackTemplateId) {
+    const tpl = state.lists.find(
+      (l) => l.id === fallbackTemplateId && l.kind === 'template',
+    )
+    if (tpl) return tpl.id
+  }
+  return null
+}
+
+/** People who pack on this list (trip travelers when set; else whole household). */
+export function peopleForList(
+  listId: string,
+  data: StoreData = state,
+): Person[] {
+  const list = data.lists.find((l) => l.id === listId)
+  if (!list || list.kind !== 'trip') return data.people
+  const ids = data.tripTravelers
+    .filter((t) => t.tripId === listId)
+    .map((t) => t.personId)
+  if (ids.length === 0) return data.people
+  const set = new Set(ids)
+  return data.people.filter((p) => set.has(p.id))
+}
+
+/** Template names this trip's sections came from (for eyebrow / cards). */
+export function tripSourceTemplateNames(
+  listId: string,
+  data: StoreData = state,
+): string[] {
+  const names = new Set<string>()
+  for (const sec of data.sections.filter((s) => s.listId === listId)) {
+    const tplId = resolveTemplateIdForTripSection(sec, data.sections)
+    if (!tplId) continue
+    const tpl = data.lists.find((l) => l.id === tplId)
+    if (tpl) names.add(tpl.name)
+  }
+  return [...names].sort((a, b) => a.localeCompare(b))
 }
 
 export function monthLabel(date = new Date()): string {
   return date.toLocaleString('en-US', { month: 'short' }) + ' ' + date.getFullYear()
 }
 
-/** Default trip name from a template, e.g. "Hiking · Sep 2026". */
+/** Default trip name from template(s), e.g. "Hiking · Sep 2026". */
 export function defaultTripName(templateId: string): string {
   const tpl = state.lists.find((l) => l.id === templateId)
   if (!tpl) return `Trip · ${monthLabel()}`
@@ -709,40 +855,65 @@ export function defaultTripName(templateId: string): string {
   return `${base} · ${monthLabel()}`
 }
 
+export function defaultTripNameFromTemplates(templateIds: string[]): string {
+  const unique = [...new Set(templateIds)]
+  if (unique.length === 1) return defaultTripName(unique[0]!)
+  return `Trip · ${monthLabel()}`
+}
+
+export type StartTripInput = {
+  name: string
+  /** Template section ids to copy. */
+  sectionIds: string[]
+  /** person_keys going on the trip. */
+  travelerIds: PersonId[]
+}
+
 /**
- * Copy a template into a fresh trip (new section/item ids, sourceSectionId links,
- * no checks, no tripOnly). Returns the new trip id.
+ * Start a trip from chosen template sections (can mix templates).
+ * Fresh section/item ids, sourceSectionId links, no checks, no tripOnly.
  */
-export function startTripFromTemplate(
-  templateId: string,
-  name: string,
-): string | null {
-  const template = state.lists.find(
-    (l) => l.id === templateId && l.kind === 'template',
-  )
-  if (!template) return null
+export async function startTrip(input: StartTripInput): Promise<string | null> {
+  const sectionIds = [...new Set(input.sectionIds)]
+  if (sectionIds.length === 0) return null
+
+  const tplSections = sectionIds
+    .map((id) => state.sections.find((s) => s.id === id))
+    .filter((s): s is NonNullable<typeof s> => {
+      if (!s) return false
+      const list = state.lists.find((l) => l.id === s.listId)
+      return list?.kind === 'template'
+    })
+    .sort((a, b) => a.position - b.position)
+
+  if (tplSections.length === 0) return null
+
+  const templateIds = [...new Set(tplSections.map((s) => s.listId))]
+  const travelers =
+    input.travelerIds.length > 0
+      ? [...new Set(input.travelerIds)]
+      : state.people.map((p) => p.id)
 
   const tripId = newId()
-  const tplSections = state.sections
-    .filter((s) => s.listId === templateId)
-    .sort((a, b) => a.position - b.position)
   const sectionIdMap = new Map<string, string>()
-
+  let pos = 0
   const newSections = tplSections.map((s) => {
     const id = newId()
     sectionIdMap.set(s.id, id)
+    pos += 1000
     return {
       id,
       listId: tripId,
       name: s.name,
-      position: s.position,
+      position: pos,
       sourceSectionId: s.id,
     }
   })
 
   const now = Date.now()
+  const sourceSectionSet = new Set(tplSections.map((s) => s.id))
   const newItems = state.items
-    .filter((i) => i.listId === templateId)
+    .filter((i) => sourceSectionSet.has(i.sectionId))
     .map((i) => ({
       id: newId(),
       listId: tripId,
@@ -756,13 +927,176 @@ export function startTripFromTemplate(
 
   const newList = {
     id: tripId,
-    name: name.trim() || defaultTripName(templateId),
+    name: input.name.trim() || defaultTripNameFromTemplates(templateIds),
     kind: 'trip' as const,
-    templateId,
+    ...(templateIds.length === 1 ? { templateId: templateIds[0] } : {}),
     createdAt: Date.now(),
   }
 
-  setState(
+  const tripTravelers = travelers.map((personId) => ({
+    tripId,
+    personId,
+  }))
+
+  const ok = await commit(
+    {
+      ...state,
+      lists: [...state.lists, newList],
+      sections: [...state.sections, ...newSections],
+      items: [...state.items, ...newItems],
+      tripTravelers: [
+        ...state.tripTravelers.filter((t) => t.tripId !== tripId),
+        ...tripTravelers,
+      ],
+    },
+    async (hh) => {
+      try {
+        await cloudInsertList(hh, newList, { skipDefaultTravelers: true })
+        await cloudInsertSections(hh, newSections)
+        await cloudInsertItems(hh, newItems)
+        await cloudReplaceTripTravelers(hh, tripId, travelers)
+      } catch (err) {
+        // Avoid orphan list/sections if a later step fails.
+        await cloudDeleteList(hh, tripId).catch(() => {})
+        throw err
+      }
+    },
+  )
+  return ok ? tripId : null
+}
+
+/** @deprecated Prefer startTrip — kept for any leftover callers. */
+export async function startTripFromTemplate(
+  templateId: string,
+  name: string,
+): Promise<string | null> {
+  const sectionIds = state.sections
+    .filter((s) => s.listId === templateId)
+    .map((s) => s.id)
+  return startTrip({
+    name,
+    sectionIds,
+    travelerIds: state.people.map((p) => p.id),
+  })
+}
+
+/**
+ * Copy one or more template sections (and their items) onto a list.
+ * On a trip, sets sourceSectionId so promote saves to the right template.
+ */
+export async function copySectionsFromTemplate(
+  listId: string,
+  templateSectionIds: string[],
+): Promise<number> {
+  const list = state.lists.find((l) => l.id === listId)
+  if (!list) return 0
+
+  const ids = [...new Set(templateSectionIds)]
+  const tplSections = ids
+    .map((id) => state.sections.find((s) => s.id === id))
+    .filter((s): s is NonNullable<typeof s> => {
+      if (!s) return false
+      return state.lists.find((l) => l.id === s.listId)?.kind === 'template'
+    })
+  if (tplSections.length === 0) return 0
+
+  const sectionIdMap = new Map<string, string>()
+  let nextPos = nextPosition(state.sections.filter((s) => s.listId === listId))
+  const newSections = tplSections.map((s) => {
+    const id = newId()
+    sectionIdMap.set(s.id, id)
+    const row = {
+      id,
+      listId,
+      name: s.name,
+      position: nextPos,
+      ...(list.kind === 'trip' ? { sourceSectionId: s.id } : {}),
+    }
+    nextPos += 1000
+    return row
+  })
+
+  const now = Date.now()
+  const srcSet = new Set(tplSections.map((s) => s.id))
+  const newItems = state.items
+    .filter((i) => srcSet.has(i.sectionId))
+    .map((i) => ({
+      id: newId(),
+      listId,
+      sectionId: sectionIdMap.get(i.sectionId)!,
+      text: i.text,
+      who: i.who,
+      position: i.position,
+      createdAt: now,
+    }))
+    .filter((i) => i.sectionId)
+
+  const ok = await commit(
+    {
+      ...state,
+      sections: [...state.sections, ...newSections],
+      items: [...state.items, ...newItems],
+    },
+    async (hh) => {
+      await cloudInsertSections(hh, newSections)
+      await cloudInsertItems(hh, newItems)
+    },
+  )
+  return ok ? newSections.length : 0
+}
+
+/**
+ * Snapshot a trip into a brand-new template (sections + items, no checks).
+ * Returns the new template id.
+ */
+export async function saveTripAsNewTemplate(
+  tripId: string,
+  name: string,
+): Promise<string | null> {
+  const trip = state.lists.find((l) => l.id === tripId && l.kind === 'trip')
+  if (!trip) return null
+  const trimmed = name.trim()
+  if (!trimmed) return null
+
+  const templateId = newId()
+  const tripSections = state.sections
+    .filter((s) => s.listId === tripId)
+    .sort((a, b) => a.position - b.position)
+  const sectionIdMap = new Map<string, string>()
+  const newSections = tripSections.map((s) => {
+    const id = newId()
+    sectionIdMap.set(s.id, id)
+    return {
+      id,
+      listId: templateId,
+      name: s.name,
+      position: s.position,
+    }
+  })
+  const now = Date.now()
+  const me = getMe()
+  const newItems = state.items
+    .filter((i) => i.listId === tripId)
+    .map((i) => ({
+      id: newId(),
+      listId: templateId,
+      sectionId: sectionIdMap.get(i.sectionId)!,
+      text: i.text,
+      who: i.who,
+      position: i.position,
+      createdAt: now,
+      ...(me ? { createdBy: me } : {}),
+    }))
+    .filter((i) => i.sectionId)
+
+  const newList = {
+    id: templateId,
+    name: trimmed,
+    kind: 'template' as const,
+    createdAt: now,
+  }
+
+  const ok = await commit(
     {
       ...state,
       lists: [...state.lists, newList],
@@ -770,16 +1104,21 @@ export function startTripFromTemplate(
       items: [...state.items, ...newItems],
     },
     async (hh) => {
-      await cloudInsertList(hh, newList)
-      await cloudInsertSections(hh, newSections)
-      await cloudInsertItems(hh, newItems)
+      try {
+        await cloudInsertList(hh, newList)
+        await cloudInsertSections(hh, newSections)
+        await cloudInsertItems(hh, newItems)
+      } catch (err) {
+        await cloudDeleteList(hh, templateId).catch(() => {})
+        throw err
+      }
     },
   )
-  return tripId
+  return ok ? templateId : null
 }
 
 /** Create an empty template with a General section. Returns the new list id. */
-export function createTemplate(name: string): string | null {
+export async function createTemplate(name: string): Promise<string | null> {
   const trimmed = name.trim()
   if (!trimmed) return null
   const listId = newId()
@@ -796,16 +1135,21 @@ export function createTemplate(name: string): string | null {
     name: 'General',
     position: 1000,
   }
-  setState(
+  const ok = await commit(
     {
       ...state,
       lists: [...state.lists, newList],
       sections: [...state.sections, newSection],
     },
     async (hh) => {
-      await cloudInsertList(hh, newList)
-      await cloudInsertSections(hh, [newSection])
+      try {
+        await cloudInsertList(hh, newList)
+        await cloudInsertSections(hh, [newSection])
+      } catch (err) {
+        await cloudDeleteList(hh, listId).catch(() => {})
+        throw err
+      }
     },
   )
-  return listId
+  return ok ? listId : null
 }

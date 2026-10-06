@@ -166,6 +166,10 @@ function buildSampleData(): StoreData {
     items,
     checks,
     listViews: [],
+    tripTravelers: [
+      { tripId: utahId, personId: 'brea' },
+      { tripId: utahId, personId: 'dustin' },
+    ],
   }
 }
 

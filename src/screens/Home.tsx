@@ -3,7 +3,7 @@ import { TacoLogo } from '../components/TacoLogo'
 import { PackingAsButton } from '../components/PackingAsButton'
 import { ProgressRows } from '../components/ProgressRows'
 import { IconChev, IconGo, IconPlus } from '../components/Icons'
-import { countNewItems, progress, resetSampleData, restoreTrip } from '../store'
+import { countNewItems, peopleForList, progress, resetSampleData, restoreTrip, tripSourceTemplateNames } from '../store'
 import { useStore } from '../store/useStore'
 import { openList } from '../store/nav'
 import type { PersonId } from '../store'
@@ -53,10 +53,15 @@ export function Home({ me }: Props) {
             </div>
           ) : (
             activeTrips.map((list) => {
-              const st = progress(list.id, data.items, data.checks, data.people)
-              const from = list.templateId
-                ? data.lists.find((l) => l.id === list.templateId)?.name
-                : undefined
+              const listPeople = peopleForList(list.id, data)
+              const st = progress(list.id, data.items, data.checks, listPeople)
+              const fromNames = tripSourceTemplateNames(list.id, data)
+              const from =
+                fromNames.length === 0
+                  ? undefined
+                  : fromNames.length <= 2
+                    ? fromNames.join(', ')
+                    : `${fromNames.length} templates`
               const packed = st.total > 0 && st.done === st.total
               const sub = packed
                 ? 'All packed'
@@ -86,7 +91,7 @@ export function Home({ me }: Props) {
                       ? ` · ${newCount} new item${newCount === 1 ? '' : 's'}`
                       : ''}
                   </div>
-                  <ProgressRows progress={st} people={data.people} />
+                  <ProgressRows progress={st} people={listPeople} />
                 </button>
               )
             })
@@ -170,9 +175,13 @@ export function Home({ me }: Props) {
             {pastOpen ? (
               <div className="tlist past-list">
                 {pastTrips.map((list) => {
-                  const from = list.templateId
-                    ? data.lists.find((l) => l.id === list.templateId)?.name
-                    : undefined
+                  const fromNames = tripSourceTemplateNames(list.id, data)
+                  const from =
+                    fromNames.length === 0
+                      ? undefined
+                      : fromNames.length <= 2
+                        ? fromNames.join(', ')
+                        : `${fromNames.length} templates`
                   return (
                     <div className="past-row" key={list.id}>
                       <button
@@ -189,9 +198,9 @@ export function Home({ me }: Props) {
                       <button
                         type="button"
                         className="btn btn-ghost past-restore"
-                        onClick={() => {
-                          restoreTrip(list.id)
-                          toast(`Restored ${list.name}`)
+                        onClick={async () => {
+                          const ok = await restoreTrip(list.id)
+                          if (ok) toast(`Restored ${list.name}`)
                         }}
                       >
                         Restore

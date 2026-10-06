@@ -1012,6 +1012,73 @@ html.is-dragging .sec-h {
   font-size: 15px;
 }
 
+.quick-add {
+  position: relative;
+  margin: 12px 0 4px;
+  z-index: 2;
+}
+
+.quick-add-in {
+  width: 100%;
+}
+
+.quick-add-suggest {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(27, 38, 32, 0.12);
+  max-height: 280px;
+  overflow: auto;
+}
+
+.quick-add-suggest button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  background: transparent;
+}
+
+.quick-add-suggest button.on,
+.quick-add-suggest button:hover {
+  background: var(--surface-2);
+}
+
+.quick-add-name {
+  font-weight: 700;
+}
+
+.quick-add-meta {
+  flex: none;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .add-sec {
   margin-top: 26px;
 }
@@ -1243,6 +1310,40 @@ fieldset.field {
   height: 20px;
   accent-color: var(--pine);
   flex: none;
+}
+
+.tpl-pick {
+  display: grid;
+  gap: 14px;
+  max-height: min(45vh, 360px);
+  overflow: auto;
+  margin-bottom: 12px;
+}
+
+.tpl-pick-group {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px 8px 8px;
+  background: var(--surface);
+}
+
+.tpl-pick-title {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 15px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 2px;
+  padding-bottom: 4px;
+}
+
+.tpl-pick-sections {
+  max-height: none;
+  margin: 0;
+  padding-left: 8px;
+}
+
+.tpl-pick-sections .pick-row {
+  font-weight: 400;
 }
 
 .menu-list {

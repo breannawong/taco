@@ -57,6 +57,12 @@ export interface ListView {
   lastViewedAt: number
 }
 
+/** Who is going on a trip (person_key). Empty → treat as whole household. */
+export interface TripTraveler {
+  tripId: string
+  personId: PersonId
+}
+
 export interface StoreData {
   people: Person[]
   lists: List[]
@@ -64,6 +70,7 @@ export interface StoreData {
   items: Item[]
   checks: Check[]
   listViews: ListView[]
+  tripTravelers: TripTraveler[]
 }
 
 export interface PersonProgress {

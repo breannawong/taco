@@ -67,9 +67,18 @@ export function progress(
 ): ListProgress {
   const listItems = items.filter((i) => i.listId === listId)
   const listChecks = checks.filter((c) => c.listId === listId)
+  const solo = people.length === 1
 
   const perPerson: ListProgress['perPerson'] = {}
   for (const person of people) {
+    if (solo) {
+      // One bar for the whole trip — every item, matching the uniform check UI.
+      const done = listItems.filter((item) =>
+        isDone(item, listChecks, people),
+      ).length
+      perPerson[person.id] = { owed: listItems.length, done }
+      continue
+    }
     let owed = 0
     let done = 0
     for (const item of listItems) {

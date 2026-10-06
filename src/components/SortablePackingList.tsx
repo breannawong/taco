@@ -40,10 +40,12 @@ function itemRowExtras(
   item: Item,
   listChecks: Check[],
   people: Person[],
+  allPeople: Person[],
   trip: boolean,
   hidePackedBy: boolean,
   me: PersonId,
   lastViewedAt: number | null,
+  solo: boolean,
 ): { packedBy: string | null; isNew: boolean } {
   const isNew = isItemNewFor(item, me, lastViewedAt)
   let packedBy: string | null = null
@@ -53,7 +55,26 @@ function itemRowExtras(
   const itemChecks = listChecks.filter((c) => c.itemId === item.id)
   if (itemChecks.length === 0) return { packedBy, isNew }
 
-  const nameOf = (id: string) => people.find((p) => p.id === id)?.name
+  const nameOf = (id: string) =>
+    allPeople.find((p) => p.id === id)?.name ??
+    people.find((p) => p.id === id)?.name
+
+  if (solo) {
+    // Only note when someone who isn't on this trip did the packing.
+    const travelerIds = new Set(people.map((p) => p.id))
+    const outsiderIds = [
+      ...new Set(
+        itemChecks
+          .map((c) => c.checkedBy ?? c.personId)
+          .filter((id) => id && !travelerIds.has(id)),
+      ),
+    ]
+    const names = outsiderIds
+      .map((id) => nameOf(id))
+      .filter(Boolean) as string[]
+    if (names.length > 0) packedBy = `Packed by ${names.join(' & ')}`
+    return { packedBy, isNew }
+  }
 
   if (item.who === 'shared') {
     const names = [
@@ -117,6 +138,10 @@ type Props = {
   allListItems: Item[]
   listChecks: Check[]
   people: Person[]
+  /** Full household — for Packed by names when a non-traveler helped. */
+  allPeople?: Person[]
+  /** Solo trip: uniform checks, simpler meta. */
+  solo?: boolean
   /** Item ids fading out of Still/Mine filters. */
   fadingIds?: string[]
   filterMode?: 'all' | 'left' | 'mine'
@@ -198,6 +223,8 @@ export function SortablePackingList({
   allListItems,
   listChecks,
   people,
+  allPeople,
+  solo = false,
   fadingIds = [],
   filterMode = 'all',
   lastViewedAt,
@@ -455,10 +482,12 @@ export function SortablePackingList({
             item,
             listChecks,
             people,
+            allPeople ?? people,
             trip,
             filterMode === 'mine',
             me,
             lastViewedAt,
+            solo,
           )
 
           if (withDrag) {
@@ -476,6 +505,7 @@ export function SortablePackingList({
                 listChecks={listChecks}
                 reorderMode={reorderMode}
                 mineOnly={filterMode === 'mine'}
+                solo={solo}
                 checksInteractive={trip && !reorderMode && !readOnly}
                 onEdit={() => onEditItem(item.id)}
               />
@@ -504,6 +534,7 @@ export function SortablePackingList({
                   me={me}
                   interactive={trip && !reorderMode && !readOnly}
                   mineOnly={filterMode === 'mine'}
+                  solo={solo}
                 />
               </div>
             </li>
@@ -702,6 +733,7 @@ type ItemRowProps = {
   listChecks: Check[]
   reorderMode: boolean
   mineOnly: boolean
+  solo: boolean
   checksInteractive: boolean
   onEdit: () => void
 }
@@ -717,6 +749,7 @@ function SortableItemRow({
   listChecks,
   reorderMode,
   mineOnly,
+  solo,
   checksInteractive,
   onEdit,
 }: ItemRowProps) {
@@ -783,6 +816,7 @@ function SortableItemRow({
           me={me}
           interactive={checksInteractive}
           mineOnly={mineOnly}
+          solo={solo}
         />
       </div>
     </li>

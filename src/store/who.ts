@@ -1,4 +1,4 @@
-import type { Who } from './types'
+import type { Person, Who } from './types'
 
 export const WHO_OPTIONS: { id: Who; label: string; hint: string }[] = [
   {
@@ -9,11 +9,34 @@ export const WHO_OPTIONS: { id: Who; label: string; hint: string }[] = [
   {
     id: 'each',
     label: 'Each',
-    hint: 'Everyone packs their own. Done when both of you check it.',
+    hint: 'Everyone packs their own. Done when everyone on the trip checks it.',
   },
   { id: 'dustin', label: 'Dustin only', hint: 'Only Dustin packs this.' },
   { id: 'brea', label: 'Brea only', hint: 'Only Brea packs this.' },
 ]
+
+/** Who-packs options for a trip: Shared, Each, and people on this trip only. */
+export function whoOptionsForTravelers(
+  travelers: Person[],
+): { id: Who; label: string; hint: string }[] {
+  const personOpts = travelers.map((p) => ({
+    id: p.id as Who,
+    label: `${p.name} only`,
+    hint: `Only ${p.name} packs this.`,
+  }))
+  return [
+    WHO_OPTIONS[0]!,
+    {
+      id: 'each',
+      label: 'Each',
+      hint:
+        travelers.length <= 1
+          ? 'Packs their own.'
+          : `Everyone on this trip packs their own. Done when all ${travelers.length} have checked it.`,
+    },
+    ...personOpts,
+  ]
+}
 
 const LAST_WHO_KEY = 'taco.lastWho'
 

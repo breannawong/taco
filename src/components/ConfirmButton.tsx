@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 type Props = {
   className?: string
   confirmLabel: string
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
   children: ReactNode
 }
 
@@ -31,7 +31,7 @@ export function ConfirmButton({
           setArmed(true)
           return
         }
-        onConfirm()
+        void onConfirm()
       }}
     >
       {armed ? confirmLabel : children}
