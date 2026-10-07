@@ -127,6 +127,9 @@ function applyLocal(next: StoreData) {
 const SAVE_FAIL_MSG =
   "Couldn't save. Check your connection and try again."
 
+/** One cloud write at a time so overlapping saves can't overwrite each other. */
+let commitChain: Promise<unknown> = Promise.resolve()
+
 /**
  * Write to Supabase first (when cloud is provided), then update local state.
  * On failure: toast, leave local state unchanged, return false.
@@ -135,25 +138,36 @@ async function commit(
   next: StoreData,
   cloud?: CloudWrite,
 ): Promise<boolean> {
-  if (cloud) {
-    const hh = status.householdId
-    if (!hh) {
-      toast(SAVE_FAIL_MSG)
-      return false
+  const previous = commitChain
+  let release!: (v?: unknown) => void
+  commitChain = new Promise((r) => {
+    release = r
+  })
+  await previous.catch(() => {})
+
+  try {
+    if (cloud) {
+      const hh = status.householdId
+      if (!hh) {
+        toast(SAVE_FAIL_MSG)
+        return false
+      }
+      try {
+        await cloud(hh)
+      } catch (err: unknown) {
+        const detail = err instanceof Error ? err.message : String(err)
+        console.error('Taco cloud sync failed:', detail)
+        toast(SAVE_FAIL_MSG)
+        return false
+      }
     }
-    try {
-      await cloud(hh)
-    } catch (err: unknown) {
-      const detail = err instanceof Error ? err.message : String(err)
-      console.error('Taco cloud sync failed:', detail)
-      toast(SAVE_FAIL_MSG)
-      return false
-    }
+    state = next
+    persistLocal(state)
+    emit()
+    return true
+  } finally {
+    release()
   }
-  state = next
-  persistLocal(state)
-  emit()
-  return true
 }
 
 function applyRemoteCheckInsert(check: Check) {
@@ -554,6 +568,9 @@ export async function deleteList(listId: string): Promise<boolean> {
 
 /** Record that this person left the list (drives "New" for next visit). */
 export async function markListViewed(listId: string, personId: PersonId): Promise<void> {
+  // List was deleted (or never loaded) — nothing to record.
+  if (!state.lists.some((l) => l.id === listId)) return
+
   const lastViewedAt = Date.now()
   const row = { listId, personId, lastViewedAt }
   const listViews = [
@@ -622,14 +639,17 @@ export async function setTripTravelers(
 }
 
 /** Persist a new section order for a list (ids top → bottom). */
-export async function setSectionOrder(listId: string, orderedIds: string[]): Promise<void> {
+export async function setSectionOrder(
+  listId: string,
+  orderedIds: string[],
+): Promise<boolean> {
   const byId = new Map(orderedIds.map((id, i) => [id, (i + 1) * 1000]))
   const nextSections = state.sections.map((s) =>
     s.listId === listId && byId.has(s.id)
       ? { ...s, position: byId.get(s.id)! }
       : s,
   )
-  await commit({ ...state, sections: nextSections }, (hh) =>
+  return await commit({ ...state, sections: nextSections }, (hh) =>
     cloudUpdateSectionPositions(
       hh,
       nextSections.filter((s) => s.listId === listId && byId.has(s.id)),
@@ -645,21 +665,43 @@ export async function setSectionOrder(listId: string, orderedIds: string[]): Pro
 export async function setItemOrderInSection(
   sectionId: string,
   orderedIds: string[],
-): Promise<void> {
-  const byId = new Map(orderedIds.map((id, i) => [id, (i + 1) * 1000]))
+): Promise<boolean> {
+  return setItemOrdersBySection({ [sectionId]: orderedIds })
+}
+
+/**
+ * Persist item order for one or more sections in a single write.
+ * Call this after a drag instead of firing setItemOrderInSection per section —
+ * overlapping commits race and snap the list back.
+ */
+export async function setItemOrdersBySection(
+  orders: Record<string, string[]>,
+): Promise<boolean> {
+  const placement = new Map<string, { sectionId: string; position: number }>()
+  for (const [sectionId, orderedIds] of Object.entries(orders)) {
+    orderedIds.forEach((id, i) => {
+      placement.set(id, { sectionId, position: (i + 1) * 1000 })
+    })
+  }
+  if (placement.size === 0) return true
+
   const nextItems = state.items.map((item) => {
-    if (!byId.has(item.id)) return item
-    return {
-      ...item,
-      sectionId,
-      position: byId.get(item.id)!,
-    }
+    const p = placement.get(item.id)
+    if (!p) return item
+    return { ...item, sectionId: p.sectionId, position: p.position }
   })
-  await commit({ ...state, items: nextItems }, (hh) =>
-    cloudUpdateItemPositions(
-      hh,
-      nextItems.filter((item) => byId.has(item.id)),
-    ),
+
+  const changed = nextItems.filter((item) => {
+    const prev = state.items.find((i) => i.id === item.id)
+    return (
+      prev != null &&
+      (prev.sectionId !== item.sectionId || prev.position !== item.position)
+    )
+  })
+  if (changed.length === 0) return true
+
+  return await commit({ ...state, items: nextItems }, (hh) =>
+    cloudUpdateItemPositions(hh, changed),
   )
 }
 
@@ -669,20 +711,8 @@ export async function setItemOrderInSection(
 export async function setItemOrderOnly(
   sectionId: string,
   orderedIds: string[],
-): Promise<void> {
-  const byId = new Map(orderedIds.map((id, i) => [id, (i + 1) * 1000]))
-  const nextItems = state.items.map((item) => {
-    if (item.sectionId !== sectionId || !byId.has(item.id)) return item
-    return { ...item, position: byId.get(item.id)! }
-  })
-  await commit({ ...state, items: nextItems }, (hh) =>
-    cloudUpdateItemPositions(
-      hh,
-      nextItems.filter(
-        (item) => item.sectionId === sectionId && byId.has(item.id),
-      ),
-    ),
-  )
+): Promise<boolean> {
+  return setItemOrdersBySection({ [sectionId]: orderedIds })
 }
 
 /**

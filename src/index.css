@@ -635,6 +635,18 @@ h3 {
   font-weight: 800;
 }
 
+.solo-prog {
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+}
+
+.solo-prog .num {
+  min-width: 0;
+  color: var(--ink);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .seg {
   display: flex;
   background: var(--surface-2);
@@ -1018,8 +1030,36 @@ html.is-dragging .sec-h {
   z-index: 2;
 }
 
+.quick-add-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .quick-add-in {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
+.quick-add-go {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--ink);
+}
+
+.quick-add-go:disabled {
+  opacity: 0.4;
+}
+
+.quick-add-go svg {
+  width: 22px;
+  height: 22px;
 }
 
 .quick-add-suggest {

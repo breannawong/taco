@@ -25,7 +25,7 @@ import {
   isDone,
   doneFor,
   isItemNewFor,
-  setItemOrderInSection,
+  setItemOrdersBySection,
   setSectionOrder,
   type Check,
   type Item,
@@ -130,7 +130,8 @@ type Props = {
   reorderMode: boolean
   /** Archived trip: no checks / edits. */
   readOnly?: boolean
-  showAddRow: boolean
+  /** Show + in each section header (Everything, not reordering/archived). */
+  showSectionAdd: boolean
   sections: Section[]
   /** Items to show (already filtered by the parent). */
   visibleItems: Item[]
@@ -217,7 +218,7 @@ export function SortablePackingList({
   canDrag,
   reorderMode,
   readOnly = false,
-  showAddRow,
+  showSectionAdd,
   sections,
   visibleItems,
   allListItems,
@@ -243,12 +244,30 @@ export function SortablePackingList({
   itemsBySectionRef.current = itemsBySection
   const sectionOrderRef = useRef(sectionOrder)
   sectionOrderRef.current = sectionOrder
+  const activeIdRef = useRef(activeId)
+  activeIdRef.current = activeId
+  /** iOS often ends a drag with over=null; keep the last good target. */
+  const lastOverIdRef = useRef<UniqueIdentifier | null>(null)
+
+  // Content signatures — parent rebuilds sections/visibleItems arrays every
+  // render, so depending on the arrays themselves would reset order constantly.
+  const sectionSig = sections.map((s) => `${s.id}:${s.position}`).join('|')
+  const itemSig = visibleItems
+    .map((i) => `${i.id}:${i.sectionId}:${i.position}`)
+    .join('|')
 
   useEffect(() => {
-    if (activeId) return
+    if (activeIdRef.current) return
     setSectionOrderLocal(sections.map((s) => s.id))
     setItemsBySection(buildItemsBySection(sections, visibleItems))
-  }, [sections, visibleItems, activeId])
+    // sections / visibleItems read intentionally from latest render with matching sigs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionSig, itemSig])
+
+  const resetLocalOrder = () => {
+    setSectionOrderLocal(sections.map((s) => s.id))
+    setItemsBySection(buildItemsBySection(sections, visibleItems))
+  }
 
   // Mouse for desktop; TouchSensor for iPhone (PointerSensor activates but
   // often won't track finger movement after a long-press on iOS Safari).
@@ -306,6 +325,7 @@ export function SortablePackingList({
       return false
     }
 
+    const orders: Record<string, string[]> = {}
     for (const section of sections) {
       const secId = section.id
       const visibleOrdered = map[secId] ?? []
@@ -318,11 +338,15 @@ export function SortablePackingList({
         if (!fullIds.includes(id)) fullIds.push(id)
       }
 
-      setItemOrderInSection(secId, applyVisibleOrder(fullIds, visibleOrdered))
+      orders[secId] = applyVisibleOrder(fullIds, visibleOrdered)
     }
+    void setItemOrdersBySection(orders).then((ok) => {
+      if (!ok) resetLocalOrder()
+    })
   }
 
   const onDragStart = (event: DragStartEvent) => {
+    lastOverIdRef.current = null
     setActiveId(event.active.id)
     lockScroll()
   }
@@ -330,6 +354,7 @@ export function SortablePackingList({
   const onDragOver = (event: DragOverEvent) => {
     const { active, over } = event
     if (!over) return
+    lastOverIdRef.current = over.id
     const a = parseDragId(active.id)
     const o = parseDragId(over.id)
     if (!a || !o || a.kind !== 'item') return
@@ -343,7 +368,20 @@ export function SortablePackingList({
             ? o.id
             : undefined
       if (!activeContainer || !overContainer) return prev
-      if (activeContainer === overContainer) return prev
+
+      // Same section: reorder as the finger moves so a lost drop target
+      // still has the right order in itemsBySectionRef.
+      if (activeContainer === overContainer) {
+        if (o.kind !== 'item') return prev
+        const ids = prev[activeContainer] ?? []
+        const oldIndex = ids.indexOf(a.id)
+        const newIndex = ids.indexOf(o.id)
+        if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return prev
+        return {
+          ...prev,
+          [activeContainer]: arrayMove(ids, oldIndex, newIndex),
+        }
+      }
 
       const activeItems = [...(prev[activeContainer] ?? [])]
       const overItems = [...(prev[overContainer] ?? [])]
@@ -369,16 +407,28 @@ export function SortablePackingList({
   }
 
   const onDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event
+    const { active } = event
+    const overId = event.over?.id ?? lastOverIdRef.current
     const currentMap = itemsBySectionRef.current
     const currentSections = sectionOrderRef.current
     setActiveId(null)
+    lastOverIdRef.current = null
     unlockScroll()
-    if (!over) return
 
     const a = parseDragId(active.id)
-    const o = parseDragId(over.id)
-    if (!a || !o) return
+    if (!a) return
+
+    // No drop target: still persist whatever onDragOver already applied.
+    if (!overId) {
+      if (a.kind === 'item') persistItemsBySection(currentMap)
+      return
+    }
+
+    const o = parseDragId(overId)
+    if (!o) {
+      if (a.kind === 'item') persistItemsBySection(currentMap)
+      return
+    }
 
     if (a.kind === 'section' && o.kind === 'section') {
       const oldIndex = currentSections.indexOf(a.id)
@@ -386,7 +436,9 @@ export function SortablePackingList({
       if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return
       const next = arrayMove(currentSections, oldIndex, newIndex)
       setSectionOrderLocal(next)
-      setSectionOrder(listId, next)
+      void setSectionOrder(listId, next).then((ok) => {
+        if (!ok) resetLocalOrder()
+      })
       return
     }
 
@@ -401,6 +453,7 @@ export function SortablePackingList({
     if (o.kind === 'item') {
       const overContainer = findItemContainer(o.id, currentMap)
       if (overContainer && overContainer !== container) {
+        // Cross-section move already applied in onDragOver.
         persistItemsBySection(currentMap)
         return
       }
@@ -411,7 +464,11 @@ export function SortablePackingList({
         persistItemsBySection(currentMap)
         return
       }
-      if (oldIndex === newIndex) return
+      if (oldIndex === newIndex) {
+        // Order may already match from onDragOver — still save.
+        persistItemsBySection(currentMap)
+        return
+      }
       const next = arrayMove(ids, oldIndex, newIndex)
       const nextMap = { ...currentMap, [container]: next }
       setItemsBySection(nextMap)
@@ -427,8 +484,7 @@ export function SortablePackingList({
   const onDragCancel = () => {
     setActiveId(null)
     unlockScroll()
-    setSectionOrderLocal(sections.map((s) => s.id))
-    setItemsBySection(buildItemsBySection(sections, visibleItems))
+    resetLocalOrder()
   }
 
   const orderedSections = sectionOrder
@@ -560,6 +616,16 @@ export function SortablePackingList({
               <h2>{section.name}</h2>
             </button>
             <span className="count">{countLabel}</span>
+            {showSectionAdd ? (
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label={`Add to ${section.name}`}
+                onClick={() => onAddItem(section.id)}
+              >
+                <IconPlus size={18} />
+              </button>
+            ) : null}
             <button
               type="button"
               className="icon-btn"
@@ -581,8 +647,10 @@ export function SortablePackingList({
         closed={closed}
         countLabel={countLabel}
         reorderMode={reorderMode}
+        showAdd={showSectionAdd}
         onToggle={() => toggleCollapsed(listId, section.id)}
         onEdit={() => onEditSection(section.id)}
+        onAdd={() => onAddItem(section.id)}
       >
         <SortableContext
           items={itemIds.map(itemDragId)}
@@ -590,16 +658,6 @@ export function SortablePackingList({
         >
           {list}
         </SortableContext>
-        {showAddRow ? (
-          <button
-            type="button"
-            className="add-row"
-            onClick={() => onAddItem(section.id)}
-          >
-            <IconPlus size={18} />
-            Add to {section.name}
-          </button>
-        ) : null}
       </SortableSection>
     )
   }
@@ -639,8 +697,10 @@ type SectionProps = {
   closed: boolean
   countLabel: string
   reorderMode: boolean
+  showAdd: boolean
   onToggle: () => void
   onEdit: () => void
+  onAdd: () => void
   children: ReactNode
 }
 
@@ -649,8 +709,10 @@ function SortableSection({
   closed,
   countLabel,
   reorderMode,
+  showAdd,
   onToggle,
   onEdit,
+  onAdd,
   children,
 }: SectionProps) {
   const {
@@ -706,6 +768,17 @@ function SortableSection({
           <h2>{section.name}</h2>
         </button>
         <span className="count">{countLabel}</span>
+        {showAdd ? (
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={`Add to ${section.name}`}
+            onClick={onAdd}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <IconPlus size={18} />
+          </button>
+        ) : null}
         <button
           type="button"
           className="icon-btn"

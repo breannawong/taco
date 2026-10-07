@@ -12,7 +12,6 @@ import {
   owes,
   peopleForList,
   progress,
-  tripSourceTemplateNames,
   type Item,
   type PersonId,
 } from '../store'
@@ -25,6 +24,7 @@ import { goHome, getView, setFilter } from '../store/nav'
 import { useCollapsedSnapshot, useFilter } from '../store/useNav'
 import { useSheet } from '../sheets/SheetProvider'
 import { ItemSheet } from '../sheets/ItemSheet'
+import { QuickAddSheet } from '../sheets/QuickAddSheet'
 import { SectionSheet } from '../sheets/SectionSheet'
 import { ListMenuSheet } from '../sheets/ListMenuSheet'
 import { UpdateTemplateSheet } from '../sheets/UpdateTemplateSheet'
@@ -168,14 +168,6 @@ export function ListScreen({ listId, me }: Props) {
 
   if (!list) return null
 
-  const fromNames = trip ? tripSourceTemplateNames(listId, data) : []
-  const fromName =
-    fromNames.length === 0
-      ? undefined
-      : fromNames.length <= 2
-        ? fromNames.join(', ')
-        : `${fromNames.length} templates`
-
   const sections = data.sections
     .filter((s) => s.listId === listId)
     .sort((a, b) => a.position - b.position)
@@ -199,6 +191,14 @@ export function ListScreen({ listId, me }: Props) {
     trip && st != null && st.total > 0 && st.done === st.total && !archived
   const showFinishPrompt = allPacked && !finishDismissed && !reordering
 
+  const eyebrow = reordering
+    ? 'Reordering'
+    : archived
+      ? 'Past trip'
+      : trip
+        ? 'Trip'
+        : 'Template'
+
   return (
     <>
       <header className="top">
@@ -215,13 +215,7 @@ export function ListScreen({ listId, me }: Props) {
             <IconBack />
           </button>
           <div className="ttl">
-            <div className="eyebrow">
-              {reordering
-                ? 'Reordering'
-                : archived
-                  ? `Past trip${fromName ? ` · from ${fromName}` : ''}`
-                  : `${trip ? 'Trip' : 'Template'}${fromName ? ` · from ${fromName}` : ''}`}
-            </div>
+            <div className="eyebrow">{eyebrow}</div>
             <h1>{list.name}</h1>
           </div>
           {reordering ? (
@@ -297,10 +291,32 @@ export function ListScreen({ listId, me }: Props) {
         {trip && st && !reordering ? (
           <>
             <div className="summary">
-              <div className="big tnum">
-                <b>{st.done}</b> of {st.total} items fully packed
-              </div>
-              <ProgressRows progress={st} people={listPeople} />
+              {soloTrip ? (
+                <div className="prog solo-prog">
+                  <div
+                    className="bar"
+                    role="img"
+                    aria-label={`${st.done} of ${st.total} packed`}
+                  >
+                    <i
+                      className={`bg-${listPeople[0]?.id ?? 'pine'}`}
+                      style={{
+                        width: `${st.total ? Math.round((st.done / st.total) * 100) : 0}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="num">
+                    {st.done} of {st.total} packed
+                  </span>
+                </div>
+              ) : (
+                <>
+                  <div className="big tnum">
+                    <b>{st.done}</b> of {st.total} items fully packed
+                  </div>
+                  <ProgressRows progress={st} people={listPeople} />
+                </>
+              )}
             </div>
             {!archived ? (
               <div className="seg" role="group" aria-label="Show">
@@ -337,7 +353,7 @@ export function ListScreen({ listId, me }: Props) {
           canDrag={!archived}
           reorderMode={reordering}
           readOnly={archived}
-          showAddRow={activeFilter === 'all' && !reordering && !archived}
+          showSectionAdd={activeFilter === 'all' && !reordering && !archived}
           sections={sections}
           visibleItems={visibleItems}
           allListItems={listItems}
@@ -357,7 +373,7 @@ export function ListScreen({ listId, me }: Props) {
             openSheet(<SectionSheet listId={listId} sectionId={sectionId} />)
           }}
           onAddItem={(sectionId) =>
-            openSheet(<ItemSheet listId={listId} sectionId={sectionId} />)
+            openSheet(<QuickAddSheet listId={listId} sectionId={sectionId} />)
           }
         />
 
